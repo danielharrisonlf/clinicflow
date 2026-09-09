@@ -1,0 +1,294 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   ClinicFlow — tokens de design.
+   Fonte da verdade: DESIGN.md. Se um valor divergir de lá, DESIGN.md vence.
+   Modo Operate: a pessoa está numa tarefa; a ferramenta some dentro dela.
+--------------------------------------------------------------------------- */
+
+@theme {
+  /* Superfície — fria e neutra para não competir com as cores de estado */
+  --color-surface-base: #ffffff;
+  --color-surface-app: #f4f6f7;
+  --color-surface-sunken: #edf1f2;
+
+  --color-border-subtle: #e4e8ea;
+  --color-border-default: #cfd6da;
+
+  --color-ink-primary: #0e1114;
+  --color-ink-secondary: #4a545e;
+  --color-ink-tertiary: #79848f;
+  --color-ink-onaccent: #ffffff;
+
+  /* Acento: ação primária, seleção atual e estado. Nunca decoração. */
+  --color-accent: #0b5c63;
+  --color-accent-hover: #094a50;
+  --color-accent-active: #073b40;
+  --color-accent-weak: #e4efef;
+
+  /* Estados — espelham AppointmentStatus um para um.
+     ATRASADA é derivada no backend, não existe no enum do Prisma. */
+  --color-state-agendada: #79848f;
+  --color-state-agendada-weak: #f4f6f7;
+  --color-state-confirmada: #1c5fa8;
+  --color-state-confirmada-weak: #eaf1f9;
+  --color-state-espera: #7a4a00;
+  --color-state-espera-weak: #f2c64b;
+  --color-state-atendimento: #0b5c63;
+  --color-state-atendimento-weak: #e4efef;
+  --color-state-concluida: #17683c;
+  --color-state-concluida-weak: #e8f2ec;
+  --color-state-cancelada: #79848f;
+  --color-state-cancelada-weak: #f4f6f7;
+  --color-state-atrasada: #b3261e;
+  --color-state-atrasada-weak: #fbebe9;
+
+  /* Âmbar como tinta sobre claro nunca é #F2C64B — vira #7A4A00, que passa em AA */
+  --color-warning: #7a4a00;
+  --color-warning-weak: #faf0d6;
+
+  /* Uma superfamília, dois papéis.
+     Next: títulos, rótulos, corpo, nomes próprios que não podem ser lidos errado.
+     Mono: hora, duração, telefone, CPF, código — medição, não fantasia. */
+  --font-sans:
+    "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono:
+    "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, Consolas,
+    monospace;
+
+  /* Escala fixa, razão ~1.2. Sem clamp: o operador vê em DPI constante. */
+  --text-hero: 44px;
+  --text-hero--line-height: 1.15;
+  --text-title: 30px;
+  --text-title--line-height: 1.15;
+  --text-metric: 28px;
+  --text-metric--line-height: 1.15;
+  --text-entity: 24px;
+  --text-entity--line-height: 1.15;
+  --text-section: 20px;
+  --text-section--line-height: 1.25;
+  --text-card: 16px;
+  --text-card--line-height: 1.35;
+  --text-body: 14px;
+  --text-body--line-height: 1.45;
+  --text-label: 13px;
+  --text-label--line-height: 1.45;
+  --text-micro: 12px;
+  --text-micro--line-height: 1.45;
+
+  /* Degraus de topo rebaixados no responsivo: 30px num board de 390 come
+     metade da largura útil. Piso de 12px, sem exceção. */
+  --text-title-sm: 24px;
+  --text-title-sm--line-height: 1.15;
+  --text-metric-sm: 20px;
+  --text-metric-sm--line-height: 1.25;
+
+  --radius-marker: 4px;
+  --radius-control: 6px;
+  --radius-raised: 8px;
+  --radius-card: 10px;
+  --radius-modal: 12px;
+
+  /* Elevação real: deslocamento + blur. Nunca halo colorido. */
+  --shadow-panel:
+    0 1px 2px rgb(14 17 20 / 0.04), 0 8px 24px rgb(14 17 20 / 0.08);
+  --shadow-raised:
+    0 1px 2px rgb(14 17 20 / 0.05), 0 2px 8px rgb(14 17 20 / 0.06);
+}
+
+/* ---------------------------------------------------------------------------
+   Tema escuro.
+
+   Só os tokens mudam. Nenhum componente tem variante `dark:` porque nenhum
+   componente conhece cor literal: quem sabe a cor é o token, e ele é redefinido
+   aqui. Tela nova não custa trabalho de tema.
+
+   Três estados: escolha explícita em `data-theme`, e o padrão do sistema quando
+   não há escolha. O `:not([data-theme="light"])` impede que a preferência do SO
+   sobreponha quem pediu claro na mão.
+
+   Fica no layer `theme` porque é onde o `@theme` do Tailwind emite os tokens.
+   Em `base` a ordem de camadas inverteria e o claro venceria sempre.
+
+   O que NÃO muda: o selo de espera. Âmbar sólido com tinta escura é legível nos
+   dois temas, e ele é o único estado preenchido do sistema.
+--------------------------------------------------------------------------- */
+@layer theme {
+  :root {
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+
+      --color-surface-base: #151b1f;
+      --color-surface-app: #0e1316;
+      --color-surface-sunken: #1d252a;
+
+      --color-border-subtle: #283238;
+      --color-border-default: #3a464e;
+
+      --color-ink-primary: #e8edef;
+      --color-ink-secondary: #a6b2b9;
+      --color-ink-tertiary: #78858d;
+      /* O acento clareia no escuro, então a tinta sobre ele escurece. */
+      --color-ink-onaccent: #062326;
+
+      --color-accent: #58b6be;
+      --color-accent-hover: #6fc5cc;
+      --color-accent-active: #83d0d6;
+      --color-accent-weak: #123338;
+
+      --color-state-agendada: #8a959c;
+      --color-state-agendada-weak: #1d252a;
+      --color-state-confirmada: #79b4ee;
+      --color-state-confirmada-weak: #14293d;
+      --color-state-atendimento: #58b6be;
+      --color-state-atendimento-weak: #123338;
+      --color-state-concluida: #6ccb95;
+      --color-state-concluida-weak: #122e1f;
+      --color-state-cancelada: #78858d;
+      --color-state-cancelada-weak: #1d252a;
+      --color-state-atrasada: #f1897f;
+      --color-state-atrasada-weak: #3a1c1b;
+
+      --color-warning: #e8b45e;
+      --color-warning-weak: #2e2413;
+
+      --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.45);
+      --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.35), 0 2px 8px rgb(0 0 0 / 0.3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --color-surface-base: #151b1f;
+    --color-surface-app: #0e1316;
+    --color-surface-sunken: #1d252a;
+
+    --color-border-subtle: #283238;
+    --color-border-default: #3a464e;
+
+    --color-ink-primary: #e8edef;
+    --color-ink-secondary: #a6b2b9;
+    --color-ink-tertiary: #78858d;
+    /* O acento clareia no escuro, então a tinta sobre ele escurece. */
+    --color-ink-onaccent: #062326;
+
+    --color-accent: #58b6be;
+    --color-accent-hover: #6fc5cc;
+    --color-accent-active: #83d0d6;
+    --color-accent-weak: #123338;
+
+    --color-state-agendada: #8a959c;
+    --color-state-agendada-weak: #1d252a;
+    --color-state-confirmada: #79b4ee;
+    --color-state-confirmada-weak: #14293d;
+    --color-state-atendimento: #58b6be;
+    --color-state-atendimento-weak: #123338;
+    --color-state-concluida: #6ccb95;
+    --color-state-concluida-weak: #122e1f;
+    --color-state-cancelada: #78858d;
+    --color-state-cancelada-weak: #1d252a;
+    --color-state-atrasada: #f1897f;
+    --color-state-atrasada-weak: #3a1c1b;
+
+    --color-warning: #e8b45e;
+    --color-warning-weak: #2e2413;
+
+    --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.45);
+    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.35), 0 2px 8px rgb(0 0 0 / 0.3);
+  }
+}
+
+@layer base {
+  :root {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-surface-app);
+    color: var(--color-ink-primary);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Superfícies do navegador que não desenhamos ainda carregam o design. */
+  ::selection {
+    background-color: var(--color-accent-weak);
+    color: var(--color-ink-primary);
+  }
+
+  :root {
+    accent-color: var(--color-accent);
+    caret-color: var(--color-accent);
+  }
+
+  /* Foco por box-shadow, não outline: respeita o border-radius. */
+  :focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--color-surface-base),
+      0 0 0 4px var(--color-accent);
+  }
+
+  /* Hora, telefone, CPF e contadores não podem saltar quando o dígito muda. */
+  .font-mono,
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Input abaixo de 16px dispara zoom automático no iOS. */
+  @media (pointer: coarse) {
+    input,
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+
+  /**
+   * `!important` é obrigatório aqui: a regra precisa vencer as utilitárias do
+   * Tailwind aplicadas no elemento. Sem ele, quem pediu menos movimento no
+   * sistema continua vendo transição.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      /* biome-ignore-start lint/complexity/noImportantStyles: precisa vencer as utilitárias */
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+      /* biome-ignore-end lint/complexity/noImportantStyles: precisa vencer as utilitárias */
+    }
+  }
+}
+
+@utility skeleton {
+  background-color: var(--color-surface-sunken);
+  border-radius: var(--radius-marker);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
