@@ -1,141 +1,131 @@
-# ClinicFlow AI — Monorepo
+# ClinicFlow
 
-Plataforma moderna para organização da operação de pequenas e médias clínicas: do agendamento ao retorno.
+Monorepo para gestao operacional de clinicas medicas, cobrindo agendamento, recepcao, sala de espera, prontuario e tarefas de retorno.
 
-## 📁 Estrutura do Monorepo
+## Estrutura do projeto
 
 ```text
 .
 ├── apps/
-│   ├── api/                  # Backend NestJS 11 (TypeScript, REST API, Jest)
-│   └── web/                  # Frontend React 19 + Vite + Tailwind v4 + Playwright
+│   ├── api/                  # Backend NestJS 11 (TypeScript, Prisma, Jest)
+│   └── web/                  # Frontend React 19 (Vite, Tailwind, Playwright)
 ├── packages/
-│   └── config/               # Configurações compartilhadas (Biome, TypeScript, Jest)
+│   └── config/               # Configuracoes compartilhadas de TypeScript, Biome e Jest
 ├── docs/
-│   ├── CLINICFLOW-CONTEXTO.md# Especificação de arquitetura e produto
+│   ├── CLINICFLOW-CONTEXTO.md# Contexto e regras de negocio
 │   └── GIT_FLOW.md           # Modelo de branches (main, qa, dev, pkg/*) e releases
-├── docker-compose.yaml       # Infra local (PostgreSQL 16, Redis 7, API e Web)
-├── turbo.json                # Pipelines de build e automação com Turborepo
-├── pnpm-workspace.yaml       # Configuração de workspaces e catálogos do pnpm
-└── biome.json                # Linter e formatador unificado de alto desempenho
+├── docker-compose.yaml       # Servicos locais (PostgreSQL 16, Redis 7 e MinIO)
+├── turbo.json                # Configuracao de tarefas com Turborepo
+├── pnpm-workspace.yaml       # Workspaces do pnpm
+└── biome.json                # Linter e formatador de codigo
 ```
 
----
+## Como rodar o ambiente local
 
-## 🚀 Como Iniciar
+### Pre-requisitos
 
-### Pré-requisitos
-- **Node.js**: >= 22.0.0
-- **pnpm**: >= 10.0.0
-- **Docker & Docker Compose** (para PostgreSQL e Redis)
+- Node.js >= 22.0.0
+- pnpm >= 10.0.0
+- Docker e Docker Compose
 
-### 1. Instalar Dependências
+### 1. Instalar dependencias
+
 ```bash
 pnpm install
 ```
 
-### 2. Subir Banco de Dados e Redis
+### 2. Subir o banco de dados e servicos auxiliares
+
 ```bash
 docker compose up -d postgres redis
 
-# Opcional: armazenamento S3-compatível para testar o upload com STORAGE_DRIVER=s3.
-# Sem ele, o driver `local` (padrão) grava em disco e assina as próprias URLs.
+# Opcional: MinIO para validar armazenamento S3
 docker compose up -d minio
 ```
 
-### 3. Preparar o Banco
+### 3. Configurar variaveis e banco de dados
+
 ```bash
 cp apps/api/.env.example apps/api/.env
 
-pnpm --filter api db:generate    # gera o Prisma Client
-pnpm --filter api db:migrate     # aplica as migrations
-pnpm --filter api db:seed        # popula o dia desenhado nas telas do Penpot
+pnpm --filter api db:generate    # gera o cliente Prisma
+pnpm --filter api db:migrate     # roda as migrations no banco local
+pnpm --filter api db:seed        # insere os dados iniciais de demonstracao
 ```
 
-O seed cria os acessos de demonstração (senha `clinicflow123`):
+Credenciais criadas no seed (senha padrao: `clinicflow123`):
 
 | Perfil | E-mail |
 | :--- | :--- |
-| Recepção | `renata.souza@clinicaviver.com.br` |
-| Gestão | `gestao@clinicaviver.com.br` |
+| Recepcao | `renata.souza@clinicaviver.com.br` |
+| Gestao | `gestao@clinicaviver.com.br` |
 
-### 4. Executar em Modo de Desenvolvimento
+### 4. Iniciar os aplicativos
+
 ```bash
-# Executa todos os serviços (API e Web) em paralelo com hot-reload via Turborepo
+# Executa API e Web simultaneamente em modo de desenvolvimento
 pnpm start:dev
 
-# Ou executar um app individualmente:
-pnpm --filter api start:dev  # NestJS API em http://localhost:3000/api/v1
-pnpm --filter web dev        # React Vite Web em http://localhost:5173
+# Ou executar apenas um deles:
+pnpm --filter api start:dev  # API NestJS em http://localhost:3000/api/v1
+pnpm --filter web dev        # Frontend React em http://localhost:5173
 ```
 
-A documentação interativa da API fica em **http://localhost:3000/docs**, com as tags
-numeradas conforme as telas do Penpot.
+A documentacao interativa Swagger fica disponivel em `http://localhost:3000/docs`.
 
----
+## Scripts do Turborepo
 
-## 🛠️ Scripts Principais (Turborepo)
-
-| Comando | Descrição |
+| Comando | Descricao |
 | :--- | :--- |
-| `pnpm build` | Compila os packages, frontend (Vite) e backend (NestJS) |
-| `pnpm start:dev` | Inicia tanto a API quanto a Web em modo de desenvolvimento |
-| `pnpm lint` | Executa o linter via Biome em todo o monorepo |
-| `pnpm lint:fix` | Corrige problemas automáticos de lint |
-| `pnpm format` | Verifica a formatação do código |
-| `pnpm format:fix` | Aplica a formatação do código com Biome |
-| `pnpm check` | Valida formatação, linter e organização de imports |
-| `pnpm check:fix` | Autocorrige formatação e linter em todos os apps |
-| `pnpm test` | Executa os testes unitários (Jest na API, Vitest na Web) |
-| `pnpm test:e2e` | Executa os testes de ponta a ponta (Supertest na API, Playwright na Web) |
+| `pnpm build` | Compila os pacotes e gera os builds de producao |
+| `pnpm start:dev` | Inicia API e Web em modo watch |
+| `pnpm lint` | Analisa o codigo com o Biome |
+| `pnpm lint:fix` | Corrige problemas automaticos de lint |
+| `pnpm format` | Valida a formatacao de arquivos |
+| `pnpm format:fix` | Aplica a formatacao padrao com o Biome |
+| `pnpm check` | Executa lint, formatacao e organizacao de imports |
+| `pnpm check:fix` | Corrige formatacao e linter nos apps |
+| `pnpm test` | Roda a suite de testes unitarios |
+| `pnpm test:e2e` | Roda os testes ponta a ponta |
 
-### Banco de dados (`apps/api`)
+### Banco de dados (apps/api)
 
-| Comando | Descrição |
+| Comando | Descricao |
 | :--- | :--- |
-| `pnpm --filter api db:generate` | Gera o Prisma Client a partir do schema |
-| `pnpm --filter api db:migrate` | Aplica as migrations pendentes (`migrate deploy`) |
-| `pnpm --filter api db:migrate:dev` | Cria uma migration a partir de alterações no schema |
-| `pnpm --filter api db:seed` | Popula a Clínica Viver com o dia desenhado nas telas |
-| `pnpm --filter api db:studio` | Abre o Prisma Studio |
-| `pnpm --filter api db:reset` | Recria o banco do zero e roda o seed |
+| `pnpm --filter api db:generate` | Gera o cliente Prisma |
+| `pnpm --filter api db:migrate` | Executa migrations pendentes |
+| `pnpm --filter api db:migrate:dev` | Cria uma nova migration |
+| `pnpm --filter api db:seed` | Popula o banco com os dados da Clinica Viver |
+| `pnpm --filter api db:studio` | Abre o painel visual do Prisma Studio |
+| `pnpm --filter api db:reset` | Recria o banco do zero e executa o seed |
 
-> Os testes E2E (`pnpm --filter api test:e2e`) exigem o Postgres no ar, com migrations
-> e seed aplicados. Os testes unitários rodam sem infraestrutura nenhuma.
+Os testes de integracao e E2E da API (`pnpm --filter api test:e2e`) precisam do container Postgres em execucao. Os testes unitarios rodam direto em memoria, sem servicos externos.
 
----
+## Arquitetura da API
 
-## 🧭 Arquitetura da API
+Camadas da aplicacao:
+- Controllers: recebem requisicoes HTTP, validam DTOs e controlam resposta.
+- Services: concentram regras de negocio, transacoes e validacoes de dominio.
+- Prisma: persistencia e queries no PostgreSQL.
 
-Camadas padrão do NestJS: **Controller** (transporte HTTP e DTOs) → **Service**
-(regra de negócio e transações) → **Prisma** (acesso a dados). Fora dos módulos de
-domínio existem duas camadas transversais:
+Pastas compartilhadas da API:
+- `src/common/`: filtros globais de excecao, guards de autenticacao JWT e perfis de acesso, validadores e DTOs de paginacao.
+- `src/shared/`: modulo Prisma, servico de horario injetavel, cliente HTTP com retry e adapter de armazenamento (filesystem local ou S3).
 
-- `src/common/` — configuração por ambiente, DTOs de paginação (offset e cursor),
-  filtro global de exceções com códigos de erro estáveis, guards de autenticação e perfil.
-- `src/shared/` — Prisma, relógio injetável, cliente HTTP de saída, auditoria, eventos de
-  domínio e o módulo global de upload (drivers `local` e `s3` atrás da mesma interface).
+## Stack e tecnologias
 
-O planejamento completo, tela a tela e rota a rota, está em [`plan.md`](./plan.md).
+- Backend: NestJS 11, TypeScript, Prisma 6, PostgreSQL 16, JWT, Swagger, Jest e Supertest.
+- Frontend: React 19, Vite, Tailwind CSS v4, Lucide React, Vitest, Testing Library e Playwright.
+- Configuracao: presets compartilhados de TypeScript, Jest e Biome em `packages/config`.
+- Build e monorepo: Turborepo e pnpm workspaces.
+- Qualidade de codigo: Biome.
 
----
+## Git Flow
 
-## 📦 Stack e Tecnologias
+O fluxo de trabalho no repositorio e organizado por modulos:
+- `pkg/<modulo>`: branches para desenvolvimento de cada pacote ou funcionalidade, com commits semanticos.
+- `dev`: branch de integracao continua onde os pacotes sao mesclados.
+- `qa`: branch de homologacao e testes antes da liberacao.
+- `main`: branch de producao estavel com tags de release semantica.
 
-- **Backend (`apps/api`):** NestJS 11, TypeScript, Prisma 6 + PostgreSQL 16, JWT, Swagger, Jest, Supertest.
-- **Frontend (`apps/web`):** React 19, Vite, Tailwind CSS v4, Lucide React, Vitest, Testing Library, Playwright.
-- **Shared Config (`packages/config`):** Configurações centralizadas de TSConfig, Jest e Biome com build em `tsup`.
-- **Orquestração & Cache:** Turborepo 2 + pnpm Catalogs.
-- **Qualidade de Código:** Biome 2.5 (execuções completas de lint/check em milissegundos).
-
----
-
-## 🌿 Git Flow & Estrutura de Branches
-
-O projeto segue um Git Flow estruturado por módulos e pacotes de release:
-- `pkg/<modulo>`: Branches de implementação modular com commits semânticos atômicos.
-- `dev`: Branch de integração contínua (recebe os merges de cada `pkg/*`).
-- `qa`: Branch de validação e testes de homologação.
-- `main`: Branch de produção protegida (recebe releases validadas de `qa` com versionamento semântico).
-
-Consulte o documento detalhado com diagramas e boas práticas em [`docs/GIT_FLOW.md`](./docs/GIT_FLOW.md).
+O guia com o diagrama do fluxo e o checklist antes do merge esta em [`docs/GIT_FLOW.md`](./docs/GIT_FLOW.md).
