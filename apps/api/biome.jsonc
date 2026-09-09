@@ -1,0 +1,24 @@
+{
+  "extends": ["@clinicflow/config/biome"],
+  "root": false,
+  "javascript": {
+    "parser": {
+      /**
+       * Controllers do Nest usam decorators de parâmetro (@Body, @Query, @Param).
+       * Sem isto o parser do Biome falha em todo controller do projeto.
+       */
+      "unsafeParameterDecoratorsEnabled": true
+    }
+  },
+  "linter": {
+    "rules": {
+      "style": {
+        /**
+         * NestJS dependency injection uses reflect-metadata; type-only imports break DI
+         * @see: https://stackoverflow.com/questions/74175543/nest-cant-resolve-dependencies-of-the-controller
+         */
+        "useImportType": "off"
+      }
+    }
+  }
+}
