@@ -1,0 +1,12 @@
+{
+  "extends": ["@clinicflow/config/biome"],
+  "root": false,
+  "files": {
+    "includes": ["**", "!test-results", "!playwright-report"]
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
+}
