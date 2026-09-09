@@ -104,7 +104,7 @@ model Clinic {
   @@map("clinics")
 }
 
-/// Os quatro campos da tela 16 (Configurações → Horários e Grade), um por um.
+/// Configurações gerais de horários e grade de atendimento da clínica.
 model ClinicSettings {
   id                    String   @id
   clinicId              String   @unique @map("clinic_id")
@@ -113,7 +113,7 @@ model ClinicSettings {
   returnWindowDays       Int     @default(30) @map("return_window_days")
   lateToleranceMinutes   Int     @default(15) @map("late_tolerance_minutes")
 
-  // Automação WhatsApp (aba 2 da tela 16)
+  // Automação WhatsApp
   whatsappEnabled  Boolean @default(false) @map("whatsapp_enabled")
   whatsappTemplate String  @default("Olá {{paciente}}, sua consulta com {{profissional}} é {{data}} às {{hora}}. Responda SIM para confirmar.") @map("whatsapp_template")
 
@@ -225,7 +225,7 @@ model Professional {
   @@map("professionals")
 }
 
-/// Janelas de atendimento da tela 13 ("Grade de atendimento configurada").
+/// Janelas semanais de atendimento configuradas para o profissional.
 /// weekday: 0 = domingo … 6 = sábado. Horas em "HH:mm" no fuso da clínica.
 model ScheduleWindow {
   id             String  @id
@@ -298,7 +298,7 @@ model Appointment {
   @@map("appointments")
 }
 
-/// Trilha de auditoria do drawer (tela 04). Uma linha por transição de estado,
+/// Trilha de auditoria das consultas. Uma linha por transição de estado,
 /// gravada na MESMA transação da mudança.
 model AppointmentEvent {
   id            String             @id
@@ -406,7 +406,7 @@ model Notification {
 }
 
 // ---------------------------------------------------------------------------
-// Auditoria geral (tela 16, aba Log de Auditoria)
+// Auditoria geral do sistema
 // ---------------------------------------------------------------------------
 
 model AuditLog {

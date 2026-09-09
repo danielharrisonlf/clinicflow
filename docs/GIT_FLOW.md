@@ -1,12 +1,10 @@
-# Git Flow — ClinicFlow AI
+# Git Flow: ClinicFlow
 
-Este documento estabelece o modelo de versionamento, fluxo de branches e ciclo de vida de releases adotado no projeto **ClinicFlow AI**.
+Este documento descreve o modelo de branches, integracao e releases do projeto ClinicFlow.
 
----
+## 1. Estrutura de branches
 
-## 1. Visão Geral da Estrutura de Branches
-
-O Git Flow do projeto é estruturado em três branches de ciclo de vida permanente (`main`, `qa`, `dev`) combinadas com branches de desenvolvimento por módulo (`pkg/<modulo>`):
+O projeto adota tres branches de ciclo de vida permanente (`main`, `qa`, `dev`) combinadas com branches de desenvolvimento por modulo (`pkg/<modulo>`):
 
 ```mermaid
 gitgraph
@@ -32,85 +30,82 @@ gitgraph
    merge qa id: "release: v0.1.0 to main" tag: "v0.1.0"
 ```
 
----
+## 2. Tipos de branches e responsabilidades
 
-## 2. Tipos de Branches e Responsabilidades
-
-| Branch | Tipo | Finalidade | Proteção |
+| Branch | Tipo | Finalidade | Protecao |
 |---|---|---|---|
-| `main` | Permanente | Código estável em **Produção**. Recebe apenas merges validados de `qa`. | Protegida (Sem commits diretos) |
-| `qa` | Permanente | Ambiente de **Homologação e Quality Assurance**. Testes de regressão, carga e validação pré-release. | Protegida (Merges vindos de `dev`) |
-| `dev` | Permanente | Linha de **Integração Contínua**. Recebe os pacotes de cada módulo (`pkg/*`). | Protegida (Merges via PR ou fast-forward aprovado) |
-| `pkg/<modulo>` | Temporária / Feature | Branch de **Implementação por Módulo/Pacote**. Commits semânticos e testes unitários do módulo. | Aberta para o desenvolvedor responsável |
+| `main` | Permanente | Codigo estavel em producao. Recebe apenas merges validados de `qa`. | Protegida (sem commits diretos) |
+| `qa` | Permanente | Ambiente de homologacao e testes de regressao antes da release. | Protegida (merges vindos de `dev`) |
+| `dev` | Permanente | Linha de integracao continua. Recebe os pacotes de cada modulo (`pkg/*`). | Protegida (merges controlados) |
+| `pkg/<modulo>` | Temporaria / Pacote | Branch de implementacao por modulo ou pacote. Commits semanticos atomicos. | Aberta para o desenvolvedor |
 
----
+## 3. Ciclo de promocao
 
-## 3. Ciclo de Promoção (Lifecycle)
-
-O fluxo operacional de entrega de código segue quatro etapas sequenciais:
+O fluxo de entrega segue quatro passos sequenciais:
 
 ```mermaid
 flowchart LR
-    A["1. pkg/<modulo>\n(Desenvolvimento e Commits Semânticos)"] --> B["2. dev\n(Integração de Módulos)"]
-    B --> C["3. qa\n(Validação e Homologação)"]
-    C --> D["4. main\n(Produção e Release Tag)"]
+    A["1. pkg/<modulo>\n(Desenvolvimento e commits)"] --> B["2. dev\n(Integracao de modulos)"]
+    B --> C["3. qa\n(Validacao e homologacao)"]
+    C --> D["4. main\n(Producao e release tag)"]
 ```
 
-### Etapa 1 — Desenvolvimento no Pacote (`pkg/<modulo>`)
-- Criar a branch a partir da versão mais recente de `dev`:
-  ```bash
-  git checkout dev
-  git pull origin dev
-  git checkout -b pkg/appointments
-  ```
-- Implementar as funcionalidades do módulo com commits semânticos atômicos.
-- Garantir que todos os testes do módulo passam localmente:
-  ```bash
-  pnpm check
-  pnpm test
-  ```
+### Etapa 1: Desenvolvimento no pacote (pkg/<modulo>)
+Crie a branch a partir da versao atualizada de `dev`:
+```bash
+git checkout dev
+git pull origin dev
+git checkout -b pkg/appointments
+```
 
-### Etapa 2 — Integração em Desenvolvimento (`dev`)
-- Merge da branch de pacote em `dev`:
-  ```bash
-  git checkout dev
-  git merge --no-ff pkg/appointments -m "merge(dev): integrate pkg/appointments"
-  ```
+Implemente as alteracoes com commits semanticos atomicos e valide os testes localmente:
+```bash
+pnpm check
+pnpm test
+```
 
-### Etapa 3 — Validação em QA (`qa`)
-- Após o fechamento de um ciclo ou milestone de pacotes em `dev`, promove-se para `qa`:
-  ```bash
-  git checkout qa
-  git merge --no-ff dev -m "release(qa): promote dev to qa for validation"
-  ```
-- Execução de testes de integração, testes E2E e validações operacionais.
+### Etapa 2: Integracao em dev
+Faca o merge da branch do pacote em `dev` mantendo o historico visual:
+```bash
+git checkout dev
+git merge --no-ff pkg/appointments -m "merge(dev): integrate pkg/appointments"
+```
 
-### Etapa 4 — Entrada em Produção (`main`)
-- Uma vez aprovado e homologado em `qa`, o código é mesclado em `main`:
-  ```bash
-  git checkout main
-  git merge --no-ff qa -m "release(main): release v0.1.0 to production"
-  git tag -a v0.1.0 -m "Release v0.1.0 - ClinicFlow AI MVP"
-  ```
+### Etapa 3: Validacao em QA
+Apos concluir uma rodada de funcionalidades em `dev`, promova as alteracoes para `qa`:
+```bash
+git checkout qa
+git merge --no-ff dev -m "release(qa): promote dev to qa for validation"
+```
 
----
+Em QA sao rodados os testes ponta a ponta e as validacoes integradas.
 
-## 4. Convenção de Commits Semânticos
+### Etapa 4: Publicacao em producao (main)
+Com a homologacao concluida em `qa`, o codigo e mesclado na `main` e recebe uma tag de versao:
+```bash
+git checkout main
+git merge --no-ff qa -m "release(main): release v0.1.0 to production"
+git tag -a v0.1.0 -m "Release v0.1.0 - ClinicFlow MVP"
+```
 
-Seguimos a especificação do **Conventional Commits**:
+## 4. Convencao de commits
 
-$$\text{tipo(escopo)}: \text{descrição clara no imperativo}$$
+Seguimos a especificacao do Conventional Commits:
 
-### Tipos Permitidos
-* `feat`: Nova funcionalidade para o usuário ou módulo.
-* `fix`: Correção de bug.
-* `refactor`: Alteração de código que não altera comportamento externo nem adiciona feature.
-* `test`: Adição ou correção de testes unitários ou de integração.
-* `docs`: Atualizações de documentação, diagramas ou README.
-* `chore`: Manutenção de dependências, configurações de build ou scripts.
-* `style`: Ajustes estéticos, formatação de código ou Biome.
+```text
+tipo(escopo): descricao clara no imperativo
+```
 
-### Exemplos Válidos
+Tipos aceitos:
+- `feat`: nova funcionalidade
+- `fix`: correcao de bug
+- `refactor`: refatoracao interna sem mudanca de comportamento
+- `test`: adicao ou ajuste de testes
+- `docs`: alteracoes na documentacao
+- `chore`: tarefas de build, scripts ou dependencias
+- `style`: ajustes de formatacao e estilo de codigo
+
+Exemplos:
 ```bash
 feat(appointments): implement state machine and conflict detection
 feat(patients): add paginated patient listing with search filters
@@ -119,12 +114,10 @@ test(storage): add unit tests for presigned upload URLs
 docs(architecture): document git flow and branching strategy
 ```
 
----
-
-## 5. Checklist Obrigatório Pré-Merge
+## 5. Checklist antes do merge
 
 Antes de qualquer merge para `dev`, `qa` ou `main`:
-1. [x] **Lint & Format**: `pnpm run check` executado com 0 erros.
-2. [x] **Testes Automatizados**: `pnpm test` executado com 100% dos testes verdes.
-3. [x] **Build Limpo**: `pnpm run build` compila sem alertas críticos de TypeScript.
-4. [x] **Código Limpo**: Sem comentários temporários, referências a números de mockups/telas ou código morto comentado.
+1. Lint e formatacao: execute `pnpm run check` com zero erros reportados.
+2. Testes automatizados: execute `pnpm test` com todas as suites verdes.
+3. Compilacao: execute `pnpm run build` com sucesso.
+4. Codigo limpo: garanta que nao ha logs temporarios, codigo morto comentado ou marcacoes provisorias.
