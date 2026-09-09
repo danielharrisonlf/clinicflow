@@ -1,0 +1,429 @@
+// ClinicFlow AI — schema operacional da clínica.
+// Convenção: camelCase no TypeScript, snake_case no banco (@map/@@map).
+// IDs são UUID v7 gerados na aplicação (uuidv7): ordenáveis no tempo, índice sem fragmentação.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  RECEPCAO
+  PROFISSIONAL
+  GESTOR
+}
+
+/// Máquina de estados da consulta. ATRASADA não está aqui de propósito:
+/// é derivada de (startsAt + lateToleranceMinutes) no DTO de resposta.
+enum AppointmentStatus {
+  AGENDADA
+  CONFIRMADA
+  CHECK_IN
+  EM_ATENDIMENTO
+  CONCLUIDA
+  CANCELADA
+  REAGENDADA
+}
+
+enum AppointmentType {
+  PRIMEIRA_CONSULTA
+  CONSULTA
+  RETORNO
+  AVALIACAO
+}
+
+enum CancelReason {
+  PACIENTE_DESMARCOU
+  NO_SHOW
+  INDISPONIBILIDADE_CLINICA
+  OUTRO
+}
+
+enum DocumentType {
+  EXAME_LABORATORIAL
+  EXAME_IMAGEM
+  ATESTADO
+  ENCAMINHAMENTO
+  LAUDO
+  RECEITA
+  OUTRO
+}
+
+enum TaskType {
+  RETORNO_A_AGENDAR
+  CONFIRMACAO_PENDENTE
+  RESGATE_NO_SHOW
+  ENVIO_DOCUMENTO
+  AGUARDANDO_EXAME
+  OUTRO
+}
+
+enum TaskStatus {
+  ABERTA
+  EM_ANDAMENTO
+  RESOLVIDA
+  CANCELADA
+}
+
+/// Por onde a ação entrou. SISTEMA = job automático, sem ator humano.
+enum Channel {
+  WEB
+  WHATSAPP
+  TELEFONE
+  SISTEMA
+}
+
+enum NotificationStatus {
+  PENDENTE
+  ENVIADA
+  FALHOU
+  RESPONDIDA
+}
+
+// ---------------------------------------------------------------------------
+// Clínica e configurações
+// ---------------------------------------------------------------------------
+
+model Clinic {
+  id        String   @id
+  name      String
+  timezone  String   @default("America/Sao_Paulo")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  settings ClinicSettings?
+
+  @@map("clinics")
+}
+
+/// Os quatro campos da tela 16 (Configurações → Horários e Grade), um por um.
+model ClinicSettings {
+  id                    String   @id
+  clinicId              String   @unique @map("clinic_id")
+  defaultDurationMinutes Int     @default(30) @map("default_duration_minutes")
+  confirmationLeadHours  Int     @default(48) @map("confirmation_lead_hours")
+  returnWindowDays       Int     @default(30) @map("return_window_days")
+  lateToleranceMinutes   Int     @default(15) @map("late_tolerance_minutes")
+
+  // Automação WhatsApp (aba 2 da tela 16)
+  whatsappEnabled  Boolean @default(false) @map("whatsapp_enabled")
+  whatsappTemplate String  @default("Olá {{paciente}}, sua consulta com {{profissional}} é {{data}} às {{hora}}. Responda SIM para confirmar.") @map("whatsapp_template")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("clinic_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Acesso
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         Role     @default(RECEPCAO)
+  isActive     Boolean  @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  professional        Professional?
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([role])
+  @@map("users")
+}
+
+/// Token de redefinição de senha. Guardado só como hash, igual ao refresh:
+/// vazamento do banco não vira troca de senha de ninguém.
+model PasswordResetToken {
+  id        String    @id
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model RefreshToken {
+  id        String    @id
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Pacientes e corpo clínico
+// ---------------------------------------------------------------------------
+
+model Patient {
+  id        String    @id
+  name      String
+  cpf       String?   @unique
+  birthDate DateTime? @map("birth_date") @db.Date
+  phone     String
+  email     String?
+  notes     String?
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  appointments Appointment[]
+  documents    Document[]
+  tasks        Task[]
+
+  @@index([name])
+  @@index([phone])
+  @@index([deletedAt])
+  @@map("patients")
+}
+
+model Professional {
+  id                     String  @id
+  userId                 String? @unique @map("user_id")
+  name                   String
+  specialty              String
+  councilType            String  @default("CRM") @map("council_type")
+  councilNumber          String  @map("council_number")
+  defaultDurationMinutes Int     @default(30) @map("default_duration_minutes")
+  isActive               Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  scheduleWindows ScheduleWindow[]
+  appointments    Appointment[]
+
+  @@index([isActive])
+  @@map("professionals")
+}
+
+/// Janelas de atendimento da tela 13 ("Grade de atendimento configurada").
+/// weekday: 0 = domingo … 6 = sábado. Horas em "HH:mm" no fuso da clínica.
+model ScheduleWindow {
+  id             String  @id
+  professionalId String  @map("professional_id")
+  weekday        Int
+  startTime      String  @map("start_time")
+  endTime        String  @map("end_time")
+  room           String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@unique([professionalId, weekday, startTime])
+  @@index([professionalId, weekday])
+  @@map("schedule_windows")
+}
+
+// ---------------------------------------------------------------------------
+// Consultas
+// ---------------------------------------------------------------------------
+
+model Appointment {
+  id             String @id
+  /// Número curto exibido no drawer ("Consulta #1042").
+  code           Int    @default(autoincrement())
+  patientId      String @map("patient_id")
+  professionalId String @map("professional_id")
+
+  startsAt DateTime @map("starts_at")
+  endsAt   DateTime @map("ends_at")
+
+  type   AppointmentType   @default(CONSULTA)
+  status AppointmentStatus @default(AGENDADA)
+  room   String?
+  notes  String?
+
+  confirmedAt DateTime? @map("confirmed_at")
+  checkedInAt DateTime? @map("checked_in_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  calledAt    DateTime? @map("called_at")
+
+  cancelReason CancelReason? @map("cancel_reason")
+  cancelNote   String?       @map("cancel_note")
+
+  rescheduledFromId String? @unique @map("rescheduled_from_id")
+
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  patient           Patient            @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  professional      Professional       @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  rescheduledFrom   Appointment?       @relation("Reschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
+  rescheduledTo     Appointment?       @relation("Reschedule")
+  events            AppointmentEvent[]
+  documents         Document[]
+  tasks             Task[]
+  notifications     Notification[]
+
+  @@unique([code])
+  @@index([startsAt, id])
+  @@index([professionalId, startsAt])
+  @@index([patientId, startsAt])
+  @@index([status, startsAt])
+  @@index([checkedInAt])
+  @@map("appointments")
+}
+
+/// Trilha de auditoria do drawer (tela 04). Uma linha por transição de estado,
+/// gravada na MESMA transação da mudança.
+model AppointmentEvent {
+  id            String             @id
+  appointmentId String             @map("appointment_id")
+  fromStatus    AppointmentStatus? @map("from_status")
+  toStatus      AppointmentStatus  @map("to_status")
+  actorId       String?            @map("actor_id")
+  actorName     String?            @map("actor_name")
+  channel       Channel            @default(WEB)
+  reason        String?
+  /// Marca o evento gerado por um "Desfazer [Z]".
+  isCompensation Boolean           @default(false) @map("is_compensation")
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId, createdAt(sort: Desc), id])
+  @@map("appointment_events")
+}
+
+// ---------------------------------------------------------------------------
+// Documentos
+// ---------------------------------------------------------------------------
+
+model Document {
+  id            String  @id
+  patientId     String  @map("patient_id")
+  appointmentId String? @map("appointment_id")
+
+  objectKey String       @unique @map("object_key")
+  fileName  String       @map("file_name")
+  mimeType  String       @map("mime_type")
+  byteSize  Int          @map("byte_size")
+  type      DocumentType @default(OUTRO)
+  /// Origem informada pela recepção ("Laboratório São Lucas").
+  source    String?
+
+  uploadedById String?   @map("uploaded_by_id")
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([patientId, createdAt(sort: Desc)])
+  @@index([appointmentId])
+  @@index([type])
+  @@index([deletedAt])
+  @@map("documents")
+}
+
+// ---------------------------------------------------------------------------
+// Pendências e retornos
+// ---------------------------------------------------------------------------
+
+model Task {
+  id            String  @id
+  patientId     String  @map("patient_id")
+  appointmentId String? @map("appointment_id")
+
+  type   TaskType
+  status TaskStatus @default(ABERTA)
+  title  String
+  notes  String?
+  dueAt  DateTime?  @map("due_at")
+
+  assigneeId   String?   @map("assignee_id")
+  resolvedAt   DateTime? @map("resolved_at")
+  resolvedById String?   @map("resolved_by_id")
+  lastContactAt DateTime? @map("last_contact_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([status, dueAt])
+  @@index([patientId])
+  @@index([type, status])
+  @@map("tasks")
+}
+
+// ---------------------------------------------------------------------------
+// Notificações (automação WhatsApp)
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id            String             @id
+  appointmentId String?            @map("appointment_id")
+  channel       Channel            @default(WHATSAPP)
+  to            String
+  body          String
+  status        NotificationStatus @default(PENDENTE)
+  error         String?
+  sentAt        DateTime?          @map("sent_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([appointmentId])
+  @@index([status, createdAt])
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Auditoria geral (tela 16, aba Log de Auditoria)
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id        String   @id
+  actorId   String?  @map("actor_id")
+  actorName String?  @map("actor_name")
+  action    String
+  entity    String
+  entityId  String   @map("entity_id")
+  channel   Channel  @default(WEB)
+  before    Json?
+  after     Json?
+  ip        String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt(sort: Desc), id])
+  @@index([entity, entityId])
+  @@index([actorId])
+  @@map("audit_logs")
+}
