@@ -26,7 +26,7 @@ export function AppointmentList({
     <>
       <table className="hidden w-full border-collapse md:table">
         <thead>
-          <tr className="border-b border-border-subtle text-left">
+          <tr className="border-b border-border-subtle bg-surface-sunken/40 text-left">
             <th
               scope="col"
               className="w-20 px-4 py-2.5 text-micro font-semibold text-ink-secondary"
@@ -138,7 +138,7 @@ function AppointmentCard({ item }: { item: AppointmentListItem }) {
   const pending = transition.isPending && transition.variables?.id === item.id;
 
   return (
-    <article className="rounded-card border border-border-subtle bg-surface-base p-4">
+    <article className="rounded-card border border-border-subtle bg-surface-base p-4 shadow-panel">
       <div className="flex items-start justify-between gap-3">
         <span className="font-mono text-section font-bold text-ink-primary">
           {item.time}

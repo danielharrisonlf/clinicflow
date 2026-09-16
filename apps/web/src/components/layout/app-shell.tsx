@@ -38,23 +38,23 @@ function SideNav() {
   return (
     <nav
       aria-label="Navegação principal"
-      className="hidden shrink-0 flex-col border-r border-border-subtle bg-surface-app md:flex md:w-[72px] lg:w-[212px]"
+      className="hidden shrink-0 flex-col border-r border-border-subtle bg-surface-base md:flex md:w-[72px] lg:w-[220px]"
     >
-      <div className="flex h-16 items-center gap-2 px-4 lg:px-5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-control bg-accent font-mono text-micro font-bold text-ink-onaccent">
+      <div className="flex h-16 items-center gap-2.5 px-4 lg:px-5">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-control bg-accent font-mono text-micro font-bold text-ink-onaccent shadow-xs">
           CF
         </span>
         <span className="hidden min-w-0 lg:block">
-          <span className="block truncate text-body font-semibold text-ink-primary">
+          <span className="block truncate text-body font-bold tracking-tight text-ink-primary">
             ClinicFlow
           </span>
-          <span className="block truncate text-micro text-ink-tertiary">
+          <span className="block truncate text-micro font-medium text-ink-tertiary">
             Clínica Viver
           </span>
         </span>
       </div>
 
-      <ul className="flex flex-1 flex-col gap-0.5 px-2 lg:px-3">
+      <ul className="flex flex-1 flex-col gap-1 px-2.5 lg:px-3">
         {NAV_ITEMS.map((item) => (
           <li key={item.to}>
             <NavLink
@@ -63,21 +63,17 @@ function SideNav() {
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-3 rounded-raised transition-colors duration-150",
-                  "px-2 py-2.5 lg:px-3",
+                  "px-2.5 py-2 lg:px-3",
                   "max-lg:flex-col max-lg:gap-1 max-lg:px-1",
                   isActive
-                    ? "bg-accent-weak text-accent"
-                    : "text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary",
+                    ? "bg-accent-weak font-semibold text-accent shadow-xs"
+                    : "font-medium text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary",
                 )
               }
             >
               <item.icon className="size-5 shrink-0" aria-hidden="true" />
-              <span className="hidden text-body font-semibold lg:block">
-                {item.label}
-              </span>
-              <span className="text-[11px] font-semibold lg:hidden">
-                {item.shortLabel}
-              </span>
+              <span className="hidden text-body lg:block">{item.label}</span>
+              <span className="text-[11px] lg:hidden">{item.shortLabel}</span>
             </NavLink>
           </li>
         ))}
@@ -90,9 +86,9 @@ function SideNav() {
         <button
           type="button"
           onClick={() => void logout()}
-          className="flex w-full items-center gap-2 rounded-raised px-1 py-2 text-left transition-colors hover:bg-surface-sunken lg:px-2"
+          className="flex w-full items-center gap-2.5 rounded-raised px-1 py-2 text-left transition-colors hover:bg-surface-sunken lg:px-2"
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-weak font-mono text-micro font-bold text-accent">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-weak border border-accent/20 font-mono text-micro font-bold text-accent">
             {initials(user?.name)}
           </span>
           <span className="hidden min-w-0 lg:block">
@@ -220,7 +216,7 @@ export function CommandTrigger({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="hidden h-10 min-w-64 items-center gap-2 rounded-control border border-border-default bg-surface-base px-3 text-left text-body text-ink-tertiary transition-colors hover:border-ink-tertiary md:flex"
+      className="hidden h-10 min-w-64 items-center gap-2 rounded-control border border-border-default bg-surface-base px-3 text-left text-body text-ink-tertiary shadow-xs transition-colors hover:border-accent hover:text-ink-secondary md:flex"
     >
       <Search className="size-4 shrink-0" aria-hidden="true" />
       <span className="flex-1 truncate">Buscar paciente, médico ou ação</span>

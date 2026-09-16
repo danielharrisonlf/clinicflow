@@ -14,9 +14,14 @@ export function AuthLayout({
   return (
     <main className="grid min-h-dvh grid-cols-1 items-center gap-10 px-6 py-12 md:grid-cols-2 md:px-16">
       <section className="mx-auto w-full max-w-md md:mx-0 md:justify-self-end md:pr-10">
-        <p className="font-mono text-entity font-bold tracking-tight text-accent">
-          ClinicFlow
-        </p>
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-control bg-accent font-mono text-body font-bold text-ink-onaccent shadow-xs">
+            CF
+          </span>
+          <p className="font-mono text-entity font-bold tracking-tight text-accent">
+            ClinicFlow
+          </p>
+        </div>
         <h1 className="mt-4 text-title-sm font-bold text-ink-primary md:text-title">
           Do agendamento ao retorno, num fluxo só.
         </h1>

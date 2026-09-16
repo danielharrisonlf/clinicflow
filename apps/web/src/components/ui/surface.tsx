@@ -10,7 +10,7 @@ export function Panel({
   return (
     <div
       className={cn(
-        "rounded-card border border-border-subtle bg-surface-base",
+        "rounded-card border border-border-subtle bg-surface-base shadow-panel",
         className,
       )}
       {...props}
@@ -68,11 +68,11 @@ export function Metric({
   return (
     <div
       className={cn(
-        "rounded-card border border-border-subtle bg-surface-base px-4 py-3",
+        "rounded-card border border-border-subtle bg-surface-base px-4 py-3 shadow-panel transition-colors hover:border-border-default",
         className,
       )}
     >
-      <p className="text-micro font-semibold text-ink-secondary">{label}</p>
+      <p className="text-micro font-medium text-ink-secondary">{label}</p>
       <p
         className={cn(
           "mt-1 font-mono text-metric-sm font-bold tabular-nums md:text-metric",

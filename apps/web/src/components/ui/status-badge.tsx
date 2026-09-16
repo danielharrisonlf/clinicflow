@@ -34,6 +34,17 @@ const STATE_LABEL: Record<DerivedState, string> = {
   ATRASADA: "Atrasada",
 };
 
+const STATE_DOT: Record<DerivedState, string> = {
+  AGENDADA: "bg-state-agendada",
+  CONFIRMADA: "bg-state-confirmada",
+  CHECK_IN: "bg-state-espera",
+  EM_ATENDIMENTO: "bg-state-atendimento animate-pulse",
+  CONCLUIDA: "bg-state-concluida",
+  CANCELADA: "bg-ink-tertiary",
+  REAGENDADA: "bg-ink-tertiary",
+  ATRASADA: "bg-state-atrasada",
+};
+
 export function StatusBadge({
   state,
   label,
@@ -47,14 +58,18 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 py-0.5",
-        "text-micro font-semibold",
+        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5",
+        "text-micro font-medium tracking-tight",
         // CHECK_IN é o único sólido: o peso vem do preenchimento, não do peso da fonte.
         state === "CHECK_IN" && "font-bold",
         STATE_STYLE[state],
         className,
       )}
     >
+      <span
+        className={cn("size-1.5 rounded-full shrink-0", STATE_DOT[state])}
+        aria-hidden="true"
+      />
       {label ?? STATE_LABEL[state]}
     </span>
   );

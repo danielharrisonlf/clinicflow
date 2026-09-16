@@ -103,15 +103,17 @@ export function AgendaPage() {
         >
           {calendar.data.map((day) => (
             <Panel key={day.date} className="flex min-w-0 flex-col p-3">
-              <p className="mb-2 text-micro font-semibold text-ink-secondary">
-                {day.weekdayLabel}{" "}
-                <span className="font-mono text-ink-primary">
+              <div className="mb-2.5 flex items-center justify-between border-b border-border-subtle pb-2">
+                <span className="text-micro font-medium text-ink-secondary">
+                  {day.weekdayLabel}
+                </span>
+                <span className="font-mono text-micro font-bold text-ink-primary">
                   {day.date.slice(8, 10)}
                 </span>
-              </p>
+              </div>
 
               {day.slots.length === 0 ? (
-                <p className="py-6 text-center text-micro text-ink-tertiary">
+                <p className="py-8 text-center text-micro text-ink-tertiary">
                   Sem consultas
                 </p>
               ) : (
@@ -120,15 +122,15 @@ export function AgendaPage() {
                     <li key={slot.id}>
                       <Link
                         to={`/consultas/${slot.id}`}
-                        className="block rounded-raised border border-border-subtle p-2 transition-colors hover:border-accent"
+                        className="group block rounded-raised border border-border-subtle bg-surface-base p-2.5 transition-all duration-150 hover:border-accent hover:shadow-xs"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-micro font-semibold text-ink-primary">
+                          <span className="font-mono text-micro font-bold text-ink-primary group-hover:text-accent">
                             {slot.time}
                           </span>
                           <StatusBadge state={slot.derivedState} />
                         </div>
-                        <p className="mt-1 truncate text-micro font-semibold text-ink-primary">
+                        <p className="mt-1.5 truncate text-micro font-semibold text-ink-primary">
                           {slot.patientName}
                         </p>
                         <p className="truncate text-micro text-ink-secondary">

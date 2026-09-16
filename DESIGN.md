@@ -1,29 +1,27 @@
-# ClinicFlow AI — Sistema Visual & Especificação Operacional
+# ClinicFlow AI — Letters Clinical Style (Sistema Visual & Operacional)
 
-Superfície: app autenticado de desktop da recepção (19 telas, 1440×900 + uma de 1280),
-arquivo Penpot "Page 1". Modo: **Operate**. A pessoa está numa tarefa; a ferramenta some dentro dela.
-**Status do Design:** 10/10 — Sistema completo, denso, acessível via teclado e auditável.
+Estilo: **Letters** (*"morning clinic under open sky — a sterile white desk beneath a wash of soft blue, dotted with surgical-blue instruments"*).
+Superfície: app autenticado de desktop da recepção (19 telas, 1440×900 + uma de 1280).
+Modo: **Operate**. A pessoa está numa tarefa; a ferramenta potencializa o fluxo com alta clareza médica.
+**Status do Design:** 10/10 — Estilo Letters completo, cirúrgico, denso, acessível via teclado e auditável.
 
 ## Cena de uso (de onde vêm as decisões)
 
-Recepcionista, 8 horas por dia, em pé ou sentada no balcão, sala com luz ambiente alta,
-monitor a ~70cm, telefone tocando, paciente na frente. Ela olha a tela em rajadas de
-1 a 3 segundos e precisa responder três perguntas: *quem chegou, quem está atrasado,
-o que eu clico agora*. Densidade e legibilidade a distância ganham de expressão.
-Luz e cor saem daí — não da categoria: tema **claro**, contraste alto, superfície fria e neutra
-para não competir com as cores de estado, que são a única informação colorida da tela.
+Recepcionista e corpo clínico, 8 horas por dia no balcão e consultórios, luz ambiente alta,
+monitor a ~70cm, telefone tocando, paciente na frente. Olhada rápida de 1 a 3 segundos
+para responder com precisão: *quem chegou, quem está atrasado, o que eu clico agora*.
+Densidade e legibilidade a distância ganham de pura expressão.
+Luz e cor do estilo **Letters**: canvas no tom céu matinal `#F8FAFC`, cartões brancos imaculados `#FFFFFF`,
+hairline borders de precisão cirúrgica `#E2E8F0`, acento no azul cirúrgico `#0284C7` e seleção no lavado celeste `#E0F2FE`.
 
 ## Tipografia
 
-Uma superfamília, dois papéis.
+Uma superfamília para display/leitura clínica e uma mono para dados operacionais.
 
-- **Atkinson Hyperlegible Next** — títulos, rótulos, corpo, botões, nomes.
-  Desenhada pelo Braille Institute para máxima diferenciação de caracteres em baixa
-  acuidade visual. Escolha do assunto, não de gosto: turno longo, olhada rápida,
-  nomes próprios que não podem ser lidos errado.
-- **Atkinson Hyperlegible Mono** — horas, durações, telefones, CPF, IDs de consulta.
-  Mono aqui é medição, não fantasia: alinha colunas de horário e impede salto de layout
-  quando 09:15 vira 11:00.
+- **Plus Jakarta Sans / Inter** — títulos, rótulos, corpo, botões, nomes de pacientes.
+  Geometria limpa, kerning refinado, alta diferenciação de glifos para leitura rápida sob pressão.
+- **JetBrains Mono** — horas, durações, telefones, CPF, códigos e IDs de consulta.
+  Mono aqui é medição e estabilidade: alinha colunas cronológicas e impede salto de layout com `font-variant-numeric: tabular-nums`.
 
 Escala fixa (sem `clamp`), razão ~1.2:
 
@@ -41,42 +39,48 @@ Escala fixa (sem `clamp`), razão ~1.2:
 
 Piso absoluto: **11px** (apenas chips técnicos e atalhos kbd). Sem caixa-alta em rótulo, sem eyebrow, sem separador `•` em meta.
 
-## Cor
+## Cor — Letters Clinical Palette
 
-Restrained. O acento é ação primária, seleção atual e estado — nunca decoração.
-
-```
-surface.base      #FFFFFF   conteúdo
-surface.app       #F4F6F7   fundo da aplicação, barra lateral
-surface.sunken    #EDF1F2   trilhos, células vazias da grade, chips kbd
-border.subtle     #E4E8EA   divisórias de linha
-border.default    #CFD6DA   contorno de campo, contorno de card
-ink.primary       #0E1114   nome, número, título
-ink.secondary     #4A545E   rótulo, apoio
-ink.tertiary      #79848F   meta, placeholder, dicas
-accent.default    #0B5C63   ação primária, item de nav atual, em atendimento
-accent.weak       #E4EFEF   fundo do item de nav atual, seleção na busca
-```
-
-Estados espelham a máquina de estados da consulta, um para um:
+Restrained & Surgical. O acento é ação primária, seleção atual e estado — nunca decoração supérflua.
 
 ```
-AGENDADA        #79848F   sem preenchimento
-CONFIRMADA      #1C5FA8   tinta azul, linha #EAF1F9
-CHECK_IN/ESPERA #7A4A00   tinta âmbar sobre pílula #F2C64B — o único selo preenchido
-EM_ATENDIMENTO  #0B5C63   acento: é a consulta viva
-CONCLUIDA       #17683C   tinta verde, linha #E8F2EC
-CANCELADA       #79848F   tinta terciária, linha esmaecida
-ATRASADA        #B3261E   tinta vermelha, linha #FBEBE9
+surface.base      #FFFFFF   cartões, painéis, modais (branco puro estéril)
+surface.app       #F8FAFC   fundo da aplicação (céu matinal suave)
+surface.sunken    #F1F5F9   trilhos, células secundárias, chips kbd
+border.subtle     #E2E8F0   divisórias de linha, hairline borders
+border.default    #CBD5E1   contornos de campo, inputs e foco
+ink.primary       #0F172A   nomes, horários, títulos (slate obsidian de alto contraste)
+ink.secondary     #475569   rótulos, apoio, especialidades médicas
+ink.tertiary      #94A3B8   meta, placeholder, dicas e timestamps
+accent.default    #0284C7   Surgical Blue: ação primária, seleção viva
+accent.hover      #0369A1   hover de ação primária
+accent.active     #075985   pressionado de ação primária
+accent.weak       #E0F2FE   Sky Tint: fundo do item de nav ativo, seleção na busca
 ```
 
-Só um estado é preenchido sólido (espera), porque é o único que pede ação imediata da
-recepção. Âmbar como **texto** nunca é `#F2C64B` — vira `#7A4A00`, que passa em AA.
+Estados clínicos espelham a máquina de estados da consulta, um para um:
+
+```
+AGENDADA        #64748B   borda sutil, fundo transparente
+CONFIRMADA      #0284C7   Surgical Blue, fundo lavado #E0F2FE
+CHECK_IN/ESPERA #B45309   âmbar sobre pílula #FEF3C7 — ação imediata
+EM_ATENDIMENTO  #0369A1   azul cirúrgico profundo, fundo #E0F2FE
+CONCLUIDA       #15803D   verde clínico saudável, fundo #DCFCE7
+CANCELADA       #94A3B8   cinza ardósia terciário, fundo #F1F5F9
+ATRASADA        #E11D48   coral de emergência, fundo #FFE4E6
+```
 
 ## Forma e espaço
 
-Grade de 4px. Raios: `4` marcador e kbd, `6` controle e campo, `8` toast e item ativo, `10` card e painel, `12` modal, pílula só em selo.
-Sombra só onde há elevação real (drawer, painel, modal, toasts): deslocamento + blur, nunca halo colorido.
+Grade de 4px. Raios cirúrgicos e proporcionais:
+- `6px` marcador, chips, kbd e tags
+- `8px` controles, botões e campos de input
+- `10px` itens de lista, dropdowns e elevações secundárias
+- `12px` cards principais, painéis e métricas
+- `16px` modais e drawers
+- Pílula (`rounded-full`) em selos de estado (`StatusBadge`).
+
+Elevação: sombras sutis com difusão limpa (`0 1px 3px rgba(15,23,42,0.04), 0 10px 25px -5px rgba(15,23,42,0.07)`), nunca halos coloridos artificiais.
 
 ## Afordâncias de Teclado (Keyboard-first)
 
