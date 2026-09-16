@@ -1,10 +1,11 @@
-import { Logger, ValidationPipe } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import express from "express";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { config } from "./common/config";
+import { AppValidationPipe } from "./common/pipes/app-validation.pipe";
 
 async function bootstrap(): Promise<void> {
   // Falha no boot, e não na primeira requisição, se faltar segredo em produção.
@@ -37,7 +38,7 @@ async function bootstrap(): Promise<void> {
   );
 
   app.useGlobalPipes(
-    new ValidationPipe({
+    new AppValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,

@@ -50,7 +50,11 @@ function Shell() {
   // ⌘K / Ctrl+K abre a paleta de qualquer lugar da aplicação autenticada.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+      if (
+        event.key &&
+        event.key.toLowerCase() === "k" &&
+        (event.metaKey || event.ctrlKey)
+      ) {
         event.preventDefault();
         setCommandOpen((open) => !open);
       }
