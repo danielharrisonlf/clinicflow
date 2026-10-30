@@ -1,6 +1,10 @@
+import { BrandMark } from "@/components/layout/brand";
+import { useDocumentTitle } from "@/components/ui/page";
+
 /**
- * Moldura das telas de acesso. O lado esquerdo é a única superfície do produto
- * que não está a serviço de uma tarefa, então é onde a marca aparece.
+ * Moldura das telas de acesso. O painel da marca é a única superfície do
+ * produto que não está a serviço de uma tarefa — e mesmo assim é curto: quem
+ * chega aqui quer entrar, não ler.
  */
 export function AuthLayout({
   title,
@@ -8,44 +12,54 @@ export function AuthLayout({
   children,
 }: {
   title: string;
-  description?: string;
+  description?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  useDocumentTitle(title);
+
   return (
-    <main className="grid min-h-dvh grid-cols-1 items-center gap-10 px-6 py-12 md:grid-cols-2 md:px-16">
-      <section className="mx-auto w-full max-w-md md:mx-0 md:justify-self-end md:pr-10">
-        <div className="flex items-center gap-2.5">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-control bg-accent font-mono text-body font-bold text-ink-onaccent shadow-xs">
-            CF
-          </span>
-          <p className="font-mono text-entity font-bold tracking-tight text-accent">
+    <div className="grid min-h-dvh grid-cols-1 bg-surface-app lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+      <aside className="hidden flex-col justify-between px-12 py-12 lg:flex">
+        <div className="flex items-center gap-3">
+          <BrandMark size="lg" />
+          <span className="text-section font-bold tracking-tight text-ink-primary">
             ClinicFlow
+          </span>
+        </div>
+
+        <div className="max-w-md">
+          <p className="text-hero font-bold tracking-tight text-balance text-ink-primary">
+            Do agendamento ao retorno, num fluxo só.
+          </p>
+          <p className="mt-4 text-card text-ink-secondary">
+            Agenda, sala de espera e pendências na mesma tela. Quem está no
+            balcão vê quem chegou sem trocar de aba.
           </p>
         </div>
-        <h1 className="mt-4 text-title-sm font-bold text-ink-primary md:text-title">
-          Do agendamento ao retorno, num fluxo só.
-        </h1>
-        <p className="mt-3 max-w-sm text-body text-ink-secondary">
-          Agenda, fila de espera e pendências na mesma tela. Quem está no balcão
-          não troca de aba para saber quem chegou.
-        </p>
-      </section>
 
-      <section className="mx-auto w-full max-w-sm md:mx-0">
-        <div className="rounded-card border border-border-subtle bg-surface-base p-6 shadow-raised">
-          <h2 className="text-section font-semibold text-ink-primary">
-            {title}
-          </h2>
-          {description ? (
-            <p className="mt-1 mb-4 text-micro text-ink-secondary">
-              {description}
-            </p>
-          ) : (
-            <div className="mb-4" />
-          )}
-          {children}
+        <p className="text-label text-ink-tertiary">
+          Acesso restrito à equipe da clínica.
+        </p>
+      </aside>
+
+      <main className="flex flex-col items-center justify-center bg-surface-base px-5 py-10 sm:px-8 lg:border-l lg:border-border-subtle">
+        <div className="mb-8 flex items-center gap-2.5 lg:hidden">
+          <BrandMark />
+          <span className="text-section font-bold tracking-tight text-ink-primary">
+            ClinicFlow
+          </span>
         </div>
-      </section>
-    </main>
+
+        <div className="w-full max-w-sm">
+          <h1 className="text-title-sm font-bold tracking-tight text-ink-primary">
+            {title}
+          </h1>
+          {description ? (
+            <p className="mt-1.5 text-body text-ink-secondary">{description}</p>
+          ) : null}
+          <div className="mt-6">{children}</div>
+        </div>
+      </main>
+    </div>
   );
 }

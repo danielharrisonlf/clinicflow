@@ -1,4 +1,4 @@
-import { request } from "./client";
+import { ApiError, request, resolveFileUrl } from "./client";
 import type {
   AppointmentDetail,
   AppointmentEvent,
@@ -9,9 +9,13 @@ import type {
   CancelInput,
   CheckAvailabilityInput,
   CreateAppointmentInput,
+  CreateDocumentInput,
   CreatePatientInput,
+  CreateTaskInput,
   CursorPage,
+  DocumentDownload,
   DocumentItem,
+  DocumentType,
   ListAppointmentsQuery,
   ListDocumentsQuery,
   ListPatientsQuery,
@@ -32,6 +36,7 @@ import type {
   TimeSlot,
   TodaySummary,
   UpdateSettingsInput,
+  UploadTicket,
   WaitingRoomItem,
   WaitingRoomMetrics,
   WhatsappSettings,
@@ -77,9 +82,14 @@ export const appointmentsApi = {
     request<CalendarDay[]>("/appointments/calendar", {
       query: { from, to, professionalId },
     }),
-  slots: (professionalId: string, date: string, durationMinutes?: number) =>
+  slots: (
+    professionalId: string,
+    date: string,
+    durationMinutes?: number,
+    excludeAppointmentId?: string,
+  ) =>
     request<TimeSlot[]>("/appointments/slots", {
-      query: { professionalId, date, durationMinutes },
+      query: { professionalId, date, durationMinutes, excludeAppointmentId },
     }),
   checkAvailability: (body: CheckAvailabilityInput) =>
     request<AvailabilityResult>("/appointments/availability", {
@@ -93,6 +103,11 @@ export const appointmentsApi = {
     }),
   create: (body: CreateAppointmentInput) =>
     request<AppointmentDetail>("/appointments", { method: "POST", body }),
+  update: (id: string, body: { notes?: string; room?: string }) =>
+    request<AppointmentDetail>(`/appointments/${id}`, {
+      method: "PATCH",
+      body,
+    }),
   confirm: (id: string) =>
     request<AppointmentDetail>(`/appointments/${id}/confirm`, {
       method: "PATCH",
@@ -132,7 +147,9 @@ export const waitingRoomApi = {
       method: "POST",
     }),
   start: (appointmentId: string) =>
-    request<void>(`/waiting-room/${appointmentId}/start`, { method: "PATCH" }),
+    request<AppointmentDetail>(`/waiting-room/${appointmentId}/start`, {
+      method: "PATCH",
+    }),
 };
 
 export const patientsApi = {
@@ -142,9 +159,9 @@ export const patientsApi = {
     }),
   detail: (id: string) => request<PatientDetail>(`/patients/${id}`),
   summary: (id: string) => request<PatientSummary>(`/patients/${id}/summary`),
-  appointments: (id: string, cursor?: string) =>
+  appointments: (id: string, cursor?: string, limit = 20) =>
     request<CursorPage<AppointmentListItem>>(`/patients/${id}/appointments`, {
-      query: { cursor, limit: 20 },
+      query: { cursor, limit },
     }),
   documents: (id: string, options: PageOptions = {}) =>
     request<Page<DocumentItem>>(`/patients/${id}/documents`, {
@@ -180,8 +197,63 @@ export const documentsApi = {
       query: query as Record<string, string | number>,
     }),
   download: (id: string) =>
-    request<{ url: string }>(`/documents/${id}/download`),
+    request<DocumentDownload>(`/documents/${id}/download`),
+  update: (id: string, body: { type?: DocumentType; source?: string | null }) =>
+    request<DocumentItem>(`/documents/${id}`, { method: "PATCH", body }),
+  remove: (id: string) =>
+    request<void>(`/documents/${id}`, { method: "DELETE" }),
+  /**
+   * Upload em três passos: assina, manda os bytes direto para o storage e
+   * registra o documento. O PUT não passa pelo `request` porque o destino pode
+   * ser o S3, que não conhece o nosso Bearer.
+   */
+  upload: async (
+    file: File,
+    meta: Omit<CreateDocumentInput, "objectKey" | "fileName">,
+  ) => {
+    const ticket = await request<UploadTicket>("/uploads/sign", {
+      method: "POST",
+      body: {
+        purpose: "DOCUMENT",
+        fileName: file.name,
+        // Alguns sistemas não informam o tipo; o backend só aceita estes quatro.
+        mimeType: file.type || mimeFromName(file.name),
+        byteSize: file.size,
+      },
+    });
+    const put = await fetch(resolveFileUrl(ticket.uploadUrl), {
+      method: "PUT",
+      headers: ticket.headers,
+      body: file,
+    }).catch(() => null);
+    if (!put?.ok) {
+      throw new ApiError({
+        statusCode: put?.status ?? 0,
+        code: "UPLOAD_FAILED",
+        message: "O envio do arquivo falhou. Tente de novo.",
+        path: "/uploads",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return request<DocumentItem>("/documents", {
+      method: "POST",
+      body: { ...meta, objectKey: ticket.objectKey, fileName: file.name },
+    });
+  },
 };
+
+const MIME_BY_EXTENSION: Record<string, string> = {
+  pdf: "application/pdf",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+};
+
+function mimeFromName(name: string): string {
+  const extension = name.split(".").pop()?.toLowerCase() ?? "";
+  return MIME_BY_EXTENSION[extension] ?? "application/octet-stream";
+}
 
 export const tasksApi = {
   list: (query: ListTasksQuery = {}) =>
@@ -194,8 +266,11 @@ export const tasksApi = {
       method: "PATCH",
       body: { notes },
     }),
+  /** Registra a tentativa de contato: a tarefa passa a "em andamento". */
   contact: (id: string) =>
     request<TaskItem>(`/tasks/${id}/contact`, { method: "POST" }),
+  create: (body: CreateTaskInput) =>
+    request<TaskItem>("/tasks", { method: "POST", body }),
 };
 
 export const settingsApi = {

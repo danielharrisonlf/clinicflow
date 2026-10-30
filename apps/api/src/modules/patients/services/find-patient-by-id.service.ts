@@ -20,7 +20,7 @@ export class FindPatientByIdService {
       ...(enriched as PatientListItemDto),
       cpf: patient.cpf,
       birthDate: patient.birthDate
-        ? ClinicTime.isoDateOf(patient.birthDate)
+        ? ClinicTime.dateOnlyOf(patient.birthDate)
         : null,
       email: patient.email,
       notes: patient.notes,

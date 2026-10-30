@@ -1,6 +1,7 @@
 ﻿import { ApiPropertyOptional } from "@nestjs/swagger";
 import { TaskStatus, TaskType } from "@prisma/client";
 import { z } from "zod";
+import { ZodRequest } from "../../../common/decorators/zod-request.decorator";
 import { PageOptionsDto } from "../../../common/dto/page-options.dto";
 
 export const ListTasksQuerySchema = z.object({
@@ -28,6 +29,12 @@ export const ListTasksQuerySchema = z.object({
 
 export type ListTasksQuery = z.infer<typeof ListTasksQuerySchema>;
 
+/**
+ * Validada pelo schema do Zod no controller; `@ZodRequest()` impede o pipe
+ * global de reaplicar o class-validator herdado de `PageOptionsDto` e faz o
+ * pipe do Zod devolver uma instância (com `skip` e `direction`).
+ */
+@ZodRequest()
 export class ListTasksQueryRequest
   extends PageOptionsDto
   implements ListTasksQuery

@@ -1,6 +1,15 @@
 # ClinicFlow
 
-Monorepo para gestao operacional de clinicas medicas, cobrindo agendamento, recepcao, sala de espera, prontuario e tarefas de retorno.
+Software de operação para a recepção de clínicas: agenda, chegadas, sala de espera,
+cadastros, documentos e pendências de retorno. O próximo passo de cada paciente,
+claro para toda a equipe.
+
+A [direção de produto](PRODUCT.md) define público, posicionamento e prioridades.
+A apresentação pública fica em `/conhecer` e na raiz para visitantes sem sessão;
+a raiz autenticada continua sendo o painel operacional.
+
+O [design system](DESIGN.md) documenta os padrões da interface. O
+[relatório do redesign](docs/REDESIGN-VALIDATION.md) reúne as melhorias, os testes e as evidências visuais.
 
 ## Estrutura do projeto
 
@@ -100,6 +109,15 @@ A documentacao interativa Swagger fica disponivel em `http://localhost:3000/docs
 | `pnpm --filter api db:reset` | Recria o banco do zero e executa o seed |
 
 Os testes de integracao e E2E da API (`pnpm --filter api test:e2e`) precisam do container Postgres em execucao. Os testes unitarios rodam direto em memoria, sem servicos externos.
+
+No frontend, `pnpm --filter web test:e2e` roda a fumaca sem backend, os fluxos com API mockada e a landing pública. Os percursos contra a API real (login, painel, desfazer, paleta) ficam em `e2e-tests/flows.spec.ts` e so rodam com a API e o seed de pe: `E2E_REAL_API=1 pnpm --filter web test:e2e flows`.
+
+Execute a suíte E2E da API em um banco isolado recém-migrado e populado: ela cria
+consultas em horários fixos e sua repetição sobre o mesmo banco pode encontrar conflitos.
+O transporte WhatsApp `log` registra mensagens como `SIMULADA`, sem enviar ao paciente.
+`ENVIADA` no transporte HTTP significa aceite do provedor, sem comprovante de entrega.
+
+O sistema visual (tokens, componentes, responsivo e decisoes de interface) esta documentado em [`DESIGN.md`](./DESIGN.md).
 
 ## Arquitetura da API
 

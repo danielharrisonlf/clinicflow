@@ -25,7 +25,14 @@ describe("StatusBadge", () => {
     }
   });
 
-  it("preenche sólido só o check-in — é o único estado que pede ação imediata", () => {
+  it("leva ícone além da cor — cor nunca é o único sinal", () => {
+    const { container } = render(<StatusBadge state="ATRASADA" />);
+    const icon = container.querySelector("svg");
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("preenche forte só o check-in — é o único estado que pede ação imediata", () => {
     const { container: checkIn } = render(<StatusBadge state="CHECK_IN" />);
     expect(checkIn.firstElementChild?.className).toContain(
       "bg-state-espera-weak",

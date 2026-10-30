@@ -1,359 +1,381 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { ArrowUpRight, Lock } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
-import { Field, TextareaField } from "@/components/ui/field";
-import { ErrorState } from "@/components/ui/states";
-import { Panel, PanelHeader } from "@/components/ui/surface";
+import { Callout } from "@/components/ui/callout";
+import { Field } from "@/components/ui/field";
+import { PageHeader } from "@/components/ui/page";
+import { ErrorState, InlineError, TextSkeleton } from "@/components/ui/states";
+import {
+  DescriptionList,
+  Panel,
+  PanelBody,
+  PanelHeader,
+} from "@/components/ui/surface";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-context";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, errorMessage } from "@/lib/api/client";
 import { settingsApi } from "@/lib/api/endpoints";
+import type { Settings, UpdateSettingsInput } from "@/lib/api/types";
 import { qk } from "@/lib/query";
+import { WhatsappSection } from "./whatsapp-section";
 
-/** Limites do `UpdateSettingsDto`. Repetidos aqui para o input barrar antes do POST. */
-const BOUNDS = {
-  defaultDurationMinutes: { min: 5, max: 480 },
-  confirmationLeadHours: { min: 1, max: 240 },
-  returnWindowDays: { min: 1, max: 365 },
-  lateToleranceMinutes: { min: 0, max: 120 },
-} as const;
+type OperationKey = keyof Required<UpdateSettingsInput>;
+
+/** Limites do `UpdateSettingsDto`. Repetidos aqui para barrar antes do envio. */
+const OPERATION_FIELDS: {
+  key: OperationKey;
+  label: string;
+  suffix: string;
+  hint: string;
+  min: number;
+  max: number;
+}[] = [
+  {
+    key: "defaultDurationMinutes",
+    label: "Duração padrão da consulta",
+    suffix: "min",
+    hint: "Usada quando o profissional não tem duração própria.",
+    min: 5,
+    max: 480,
+  },
+  {
+    key: "confirmationLeadHours",
+    label: "Antecedência da confirmação",
+    suffix: "h",
+    hint: "Quantas horas antes da consulta o pedido de confirmação sai.",
+    min: 1,
+    max: 240,
+  },
+  {
+    key: "returnWindowDays",
+    label: "Janela de retorno",
+    suffix: "dias",
+    hint: "Prazo da pendência de retorno criada ao concluir uma consulta.",
+    min: 1,
+    max: 365,
+  },
+  {
+    key: "lateToleranceMinutes",
+    label: "Tolerância de atraso",
+    suffix: "min",
+    hint: "Depois disso, a consulta não atendida aparece como atrasada.",
+    min: 0,
+    max: 120,
+  },
+];
 
 export function SettingsPage() {
   const { user } = useAuth();
   const isManager = user?.role === "GESTOR";
 
   const settings = useQuery({
-    queryKey: qk.settings,
+    queryKey: qk.settings.general,
     queryFn: settingsApi.get,
   });
 
-  if (settings.isError) {
-    return (
-      <ErrorState
-        error={settings.error}
-        onRetry={() => void settings.refetch()}
-      />
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-4 md:gap-6">
-      <header>
-        <h1 className="text-title-sm font-bold text-ink-primary md:text-title">
-          Configurações
-        </h1>
-        {!isManager ? (
-          <p className="mt-0.5 text-body text-ink-secondary">
-            Somente leitura. Alterar exige perfil de gestão.
+    <div className="flex max-w-6xl flex-col gap-5">
+      <PageHeader
+        title="Configurações"
+        description="Regras de funcionamento da clínica e preferências deste aparelho."
+        className="mb-0 md:mb-0"
+      />
+
+      {!isManager ? (
+        <Callout tone="info" title="Somente leitura">
+          Alterar as regras da clínica exige o perfil de gestão. Se algo precisa
+          mudar, fale com a gestão.
+        </Callout>
+      ) : null}
+
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[12rem_minmax(0,1fr)] lg:gap-8">
+        <nav
+          aria-label="Seções das configurações"
+          className="lg:sticky lg:top-6 lg:self-start"
+        >
+          <p className="mb-2 text-label font-semibold text-ink-secondary">
+            Nesta página
           </p>
-        ) : null}
-      </header>
+          <div className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+            {[
+              ["secao-clinica", "Clínica"],
+              ["secao-operacao", "Regras de atendimento"],
+              ["secao-whatsapp", "WhatsApp"],
+              ["secao-aparencia", "Aparência"],
+            ].map(([id, label]) => (
+              <a
+                key={id}
+                href={`#${id}`}
+                className="shrink-0 rounded-control px-3 py-2 text-label font-medium text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-accent-ink lg:w-full"
+              >
+                {label}
+              </a>
+            ))}
+          </div>
+        </nav>
+        <div className="flex min-w-0 flex-col gap-5">
+          {settings.isError && !settings.data ? (
+            <Panel>
+              <ErrorState
+                title="As configurações não carregaram"
+                error={settings.error}
+                onRetry={() => void settings.refetch()}
+              />
+            </Panel>
+          ) : (
+            <>
+              <Panel aria-labelledby="secao-clinica">
+                <PanelHeader
+                  id="secao-clinica"
+                  title="Clínica"
+                  description="Nome exibido na navegação e fuso usado nos horários da agenda."
+                />
+                <PanelBody>
+                  {settings.data ? (
+                    <DescriptionList
+                      items={[
+                        { label: "Nome", value: settings.data.clinicName },
+                        {
+                          label: "Fuso horário",
+                          value: (
+                            <span className="font-mono">
+                              {settings.data.timezone}
+                            </span>
+                          ),
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <TextSkeleton lines={2} />
+                  )}
+                  <Link
+                    to="/profissionais"
+                    className="mt-4 inline-flex items-center gap-1 rounded-marker text-label font-semibold text-accent-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent-ink"
+                  >
+                    Gerenciar horários dos profissionais
+                    <ArrowUpRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </PanelBody>
+              </Panel>
 
-      <Panel>
-        <PanelHeader title="Clínica" />
-        <dl className="divide-y divide-border-subtle">
-          <ReadOnlyRow term="Nome" value={settings.data?.clinicName} />
-          <ReadOnlyRow
-            term="Fuso horário"
-            value={settings.data?.timezone}
-            mono
-          />
-        </dl>
-      </Panel>
+              <OperationSection settings={settings.data} editable={isManager} />
 
-      <OperationForm
-        settings={settings.data}
-        loading={settings.isPending}
-        editable={isManager}
-      />
+              <WhatsappSection
+                leadHours={settings.data?.confirmationLeadHours}
+                editable={isManager}
+              />
+            </>
+          )}
 
-      {isManager ? <WhatsappForm /> : null}
+          <Panel aria-labelledby="secao-aparencia">
+            <PanelHeader
+              id="secao-aparencia"
+              title="Aparência"
+              description="Vale só para este navegador. “Sistema” segue o tema do aparelho."
+            />
+            <PanelBody className="max-w-sm">
+              <ThemeToggle />
+            </PanelBody>
+          </Panel>
+        </div>
+      </div>
     </div>
   );
 }
 
-function ReadOnlyRow({
-  term,
-  value,
-  mono,
-}: {
-  term: string;
-  value?: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline gap-4 px-4 py-3">
-      <dt className="min-w-40 text-body font-semibold text-ink-primary">
-        {term}
-      </dt>
-      <dd className={`text-body text-ink-secondary ${mono ? "font-mono" : ""}`}>
-        {value ?? (
-          <span className="skeleton inline-block h-4 w-32 align-middle" />
-        )}
-      </dd>
-    </div>
-  );
+/**
+ * Erro do campo, ou nada. Campo vazio é erro, não zero: `Number("")` é 0 e
+ * salvaria "tolerância 0" sem ninguém ter pedido.
+ */
+function fieldError(
+  raw: string,
+  field: (typeof OPERATION_FIELDS)[number],
+): string | undefined {
+  const range = `entre ${field.min} e ${field.max} ${field.suffix}`;
+  if (raw.trim() === "") return `Informe um valor ${range}.`;
+  const value = Number(raw);
+  if (!Number.isInteger(value)) return `Use um número inteiro ${range}.`;
+  if (value < field.min || value > field.max)
+    return `O valor precisa ficar ${range}.`;
+  return undefined;
 }
 
-type OperationValues = {
-  defaultDurationMinutes: string;
-  confirmationLeadHours: string;
-  returnWindowDays: string;
-  lateToleranceMinutes: string;
-};
-
-function OperationForm({
+function OperationSection({
   settings,
-  loading,
   editable,
 }: {
-  settings?: {
-    defaultDurationMinutes: number;
-    confirmationLeadHours: number;
-    returnWindowDays: number;
-    lateToleranceMinutes: number;
-  };
-  loading: boolean;
+  settings?: Settings;
   editable: boolean;
 }) {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [values, setValues] = useState<OperationValues | null>(null);
+  // Só o que a pessoa mexeu. O resto lê direto do servidor: sem semear estado
+  // com a resposta, nada sobrescreve o que já foi digitado num refetch.
+  const [draft, setDraft] = useState<Partial<Record<OperationKey, string>>>({});
+  const [touched, setTouched] = useState(false);
 
-  // O formulário só é semeado quando a resposta chega. Semear com string vazia
-  // e sobrescrever depois apagaria o que a pessoa já tivesse digitado.
-  useEffect(() => {
-    if (!settings || values) return;
-    setValues({
-      defaultDurationMinutes: String(settings.defaultDurationMinutes),
-      confirmationLeadHours: String(settings.confirmationLeadHours),
-      returnWindowDays: String(settings.returnWindowDays),
-      lateToleranceMinutes: String(settings.lateToleranceMinutes),
-    });
-  }, [settings, values]);
+  const currentValue = (key: OperationKey) =>
+    draft[key] ?? (settings ? String(settings[key]) : "");
 
-  const save = useMutation({
-    mutationFn: (next: OperationValues) =>
-      settingsApi.update({
-        defaultDurationMinutes: Number(next.defaultDurationMinutes),
-        confirmationLeadHours: Number(next.confirmationLeadHours),
-        returnWindowDays: Number(next.returnWindowDays),
-        lateToleranceMinutes: Number(next.lateToleranceMinutes),
-      }),
-    onSuccess: (saved) => {
-      queryClient.setQueryData(qk.settings, saved);
-      void queryClient.invalidateQueries({ queryKey: qk.appointments.all });
-      void queryClient.invalidateQueries({ queryKey: qk.dashboard.all });
-      toast.push({ tone: "success", title: "Configurações salvas" });
-    },
-    onError: (error) =>
-      toast.push({
-        tone: "error",
-        title: "Não foi possível salvar",
-        description:
-          error instanceof ApiError ? error.message : "Tente de novo.",
-      }),
-  });
-
-  const dirty =
-    values !== null &&
-    settings !== undefined &&
-    (Number(values.defaultDurationMinutes) !==
-      settings.defaultDurationMinutes ||
-      Number(values.confirmationLeadHours) !== settings.confirmationLeadHours ||
-      Number(values.returnWindowDays) !== settings.returnWindowDays ||
-      Number(values.lateToleranceMinutes) !== settings.lateToleranceMinutes);
-
-  function set(field: keyof OperationValues) {
-    return (event: React.ChangeEvent<HTMLInputElement>) =>
-      setValues((current) =>
-        current ? { ...current, [field]: event.target.value } : current,
-      );
-  }
-
-  return (
-    <Panel>
-      <PanelHeader title="Operação" />
-      <form
-        className="p-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (values) save.mutate(values);
-        }}
-      >
-        {loading || !values ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="skeleton h-16 rounded-control" />
-            ))}
-          </div>
-        ) : (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field
-                label="Duração padrão da consulta"
-                type="number"
-                inputMode="numeric"
-                disabled={!editable}
-                min={BOUNDS.defaultDurationMinutes.min}
-                max={BOUNDS.defaultDurationMinutes.max}
-                value={values.defaultDurationMinutes}
-                onChange={set("defaultDurationMinutes")}
-                hint="Minutos"
-              />
-              <Field
-                label="Antecedência da confirmação"
-                type="number"
-                inputMode="numeric"
-                disabled={!editable}
-                min={BOUNDS.confirmationLeadHours.min}
-                max={BOUNDS.confirmationLeadHours.max}
-                value={values.confirmationLeadHours}
-                onChange={set("confirmationLeadHours")}
-                hint="Horas antes da consulta"
-              />
-              <Field
-                label="Janela de retorno"
-                type="number"
-                inputMode="numeric"
-                disabled={!editable}
-                min={BOUNDS.returnWindowDays.min}
-                max={BOUNDS.returnWindowDays.max}
-                value={values.returnWindowDays}
-                onChange={set("returnWindowDays")}
-                hint="Dias"
-              />
-              <Field
-                label="Tolerância de atraso"
-                type="number"
-                inputMode="numeric"
-                disabled={!editable}
-                min={BOUNDS.lateToleranceMinutes.min}
-                max={BOUNDS.lateToleranceMinutes.max}
-                value={values.lateToleranceMinutes}
-                onChange={set("lateToleranceMinutes")}
-                hint="Minutos até a consulta entrar como atrasada"
-              />
-            </div>
-
-            {editable ? (
-              <div className="mt-4 flex gap-2">
-                <Button
-                  type="submit"
-                  loading={save.isPending}
-                  disabled={!dirty}
-                >
-                  Salvar
-                </Button>
-                {dirty ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setValues(null)}
-                  >
-                    Descartar
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-          </>
-        )}
-      </form>
-    </Panel>
+  const changed = OPERATION_FIELDS.filter(
+    (field) =>
+      settings !== undefined &&
+      draft[field.key] !== undefined &&
+      draft[field.key] !== String(settings[field.key]),
   );
-}
-
-function WhatsappForm() {
-  const queryClient = useQueryClient();
-  const toast = useToast();
-  const whatsapp = useQuery({
-    queryKey: [...qk.settings, "whatsapp"],
-    queryFn: settingsApi.whatsapp,
-  });
-
-  const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [template, setTemplate] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!whatsapp.data || enabled !== null) return;
-    setEnabled(whatsapp.data.whatsappEnabled);
-    setTemplate(whatsapp.data.whatsappTemplate);
-  }, [whatsapp.data, enabled]);
+  const dirty = changed.length > 0;
+  const errors = Object.fromEntries(
+    OPERATION_FIELDS.map((field) => [
+      field.key,
+      fieldError(currentValue(field.key), field),
+    ]),
+  ) as Record<OperationKey, string | undefined>;
+  const invalid = OPERATION_FIELDS.some((field) => errors[field.key]);
 
   const save = useMutation({
-    mutationFn: () =>
-      settingsApi.updateWhatsapp({
-        whatsappEnabled: enabled ?? false,
-        whatsappTemplate: template ?? "",
-      }),
+    mutationFn: () => {
+      const body: UpdateSettingsInput = {};
+      for (const field of changed)
+        body[field.key] = Number(currentValue(field.key));
+      return settingsApi.update(body);
+    },
     onSuccess: (saved) => {
-      queryClient.setQueryData([...qk.settings, "whatsapp"], saved);
-      toast.push({ tone: "success", title: "Mensagem automática atualizada" });
+      queryClient.setQueryData(qk.settings.general, saved);
+      for (const queryKey of [
+        qk.settings.all,
+        qk.appointments.all,
+        qk.dashboard.all,
+      ]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+      setDraft({});
+      setTouched(false);
+      toast.push({
+        tone: "success",
+        title: "Regras de operação salvas",
+        description: "Agenda e painel já usam os novos valores.",
+      });
     },
     onError: (error) =>
       toast.push({
         tone: "error",
-        title: "Não foi possível salvar",
-        description:
-          error instanceof ApiError ? error.message : "Tente de novo.",
+        title: "As regras não foram salvas",
+        description: errorMessage(error),
       }),
   });
 
+  const serverErrors =
+    save.error instanceof ApiError ? save.error.fieldErrors() : {};
+
   return (
-    <Panel>
-      <PanelHeader title="Confirmação por WhatsApp" />
+    <Panel aria-labelledby="secao-operacao">
+      <PanelHeader
+        id="secao-operacao"
+        title="Regras de atendimento"
+        description="Valores padrão da clínica. A grade de horários de cada profissional fica no cadastro de profissionais."
+        actions={
+          editable ? null : (
+            <span className="inline-flex items-center gap-1 text-label text-ink-secondary">
+              <Lock className="size-3.5" aria-hidden="true" />
+              Só a gestão altera
+            </span>
+          )
+        }
+      />
       <form
-        className="flex flex-col gap-4 p-4"
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
+          setTouched(true);
+          if (!dirty || invalid) return;
           save.mutate();
         }}
       >
-        {whatsapp.isPending || enabled === null ? (
-          <div className="skeleton h-32 rounded-control" />
-        ) : (
-          <>
-            <label className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(event) => setEnabled(event.target.checked)}
-                className="size-4 rounded-marker accent-accent"
-              />
-              <span className="text-body font-semibold text-ink-primary">
-                Enviar confirmação automática
-              </span>
-            </label>
-
-            <TextareaField
-              label="Mensagem"
-              rows={4}
-              value={template ?? ""}
-              onChange={(event) => setTemplate(event.target.value)}
-              disabled={!enabled}
-            />
-            <p className="-mt-2 text-micro text-ink-tertiary">
-              Use{" "}
-              <code className="font-mono">
-                {"{{paciente}} {{profissional}} {{data}} {{hora}}"}
-              </code>
-              .
-            </p>
-
-            {whatsapp.data?.transport === "log" ? (
-              <p className="rounded-control border border-warning/30 bg-warning-weak px-3 py-2 text-micro text-warning">
-                O transporte está em modo de teste. As mensagens são registradas
-                no log e não chegam ao paciente.
-              </p>
-            ) : null}
-
-            <div>
-              <Button type="submit" loading={save.isPending}>
-                Salvar
-              </Button>
+        <PanelBody>
+          {settings ? (
+            <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+              {OPERATION_FIELDS.map((field) => {
+                const own = draft[field.key] !== undefined || touched;
+                return (
+                  <Field
+                    key={field.key}
+                    label={field.label}
+                    type="number"
+                    inputMode="numeric"
+                    min={field.min}
+                    max={field.max}
+                    step={1}
+                    suffix={field.suffix}
+                    readOnly={!editable}
+                    value={currentValue(field.key)}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        [field.key]: event.target.value,
+                      }))
+                    }
+                    hint={field.hint}
+                    error={
+                      editable && own
+                        ? (errors[field.key] ?? serverErrors[field.key])
+                        : undefined
+                    }
+                  />
+                );
+              })}
             </div>
-          </>
-        )}
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {OPERATION_FIELDS.map((field) => (
+                <div key={field.key} className="flex flex-col gap-2">
+                  <div className="skeleton h-4 w-40" />
+                  <div className="skeleton h-10 w-full" />
+                </div>
+              ))}
+            </div>
+          )}
+        </PanelBody>
+        {editable && settings ? (
+          <div className="flex flex-col-reverse gap-2 border-t border-border-subtle px-4 py-3 sm:flex-row sm:items-center sm:justify-end md:px-5">
+            <p
+              className="text-label text-ink-secondary sm:mr-auto"
+              aria-live="polite"
+            >
+              {dirty
+                ? changed.length === 1
+                  ? "1 alteração não salva"
+                  : `${changed.length} alterações não salvas`
+                : "Tudo salvo"}
+            </p>
+            {dirty ? (
+              <Button
+                variant="ghost"
+                disabled={save.isPending}
+                onClick={() => {
+                  setDraft({});
+                  setTouched(false);
+                  save.reset();
+                }}
+              >
+                Descartar
+              </Button>
+            ) : null}
+            <Button type="submit" loading={save.isPending} disabled={!dirty}>
+              Salvar
+            </Button>
+          </div>
+        ) : null}
+        {editable && save.isError && Object.keys(serverErrors).length === 0 ? (
+          <div className="px-4 pb-4 md:px-5">
+            <InlineError
+              error={save.error}
+              label="O servidor recusou as alterações."
+            />
+          </div>
+        ) : null}
       </form>
     </Panel>
   );

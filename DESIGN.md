@@ -1,315 +1,245 @@
-# ClinicFlow AI — Letters Clinical Style (Sistema Visual & Operacional)
+# ClinicFlow — Sistema visual
 
-Estilo: **Letters** (*"morning clinic under open sky — a sterile white desk beneath a wash of soft blue, dotted with surgical-blue instruments"*).
-Superfície: app autenticado de desktop da recepção (19 telas, 1440×900 + uma de 1280).
-Modo: **Operate**. A pessoa está numa tarefa; a ferramenta potencializa o fluxo com alta clareza médica.
-**Status do Design:** 10/10 — Estilo Letters completo, cirúrgico, denso, acessível via teclado e auditável.
+Superfície: app autenticado da recepção e do corpo clínico (`apps/web`), do celular ao monitor do balcão.
+Modo: **Operate**. A pessoa está numa tarefa; a ferramenta some dentro dela.
+
+> Fonte da verdade: **o código** (`apps/web/src/index.css`, `apps/web/src/lib/fluent-theme.ts`
+> e `apps/web/src/components/ui`). Os temas publicados de `@fluentui/tokens` fornecem
+> cores de marca e neutros, fonte e raios; os componentes continuam sendo do ClinicFlow.
+> O arquivo Penpot documenta a versão anterior ("Letters", azul cirúrgico, Plus Jakarta/Inter)
+> e ainda não foi redesenhado para este sistema.
 
 ## Cena de uso (de onde vêm as decisões)
 
-Recepcionista e corpo clínico, 8 horas por dia no balcão e consultórios, luz ambiente alta,
-monitor a ~70cm, telefone tocando, paciente na frente. Olhada rápida de 1 a 3 segundos
-para responder com precisão: *quem chegou, quem está atrasado, o que eu clico agora*.
-Densidade e legibilidade a distância ganham de pura expressão.
-Luz e cor do estilo **Letters**: canvas no tom céu matinal `#F8FAFC`, cartões brancos imaculados `#FFFFFF`,
-hairline borders de precisão cirúrgica `#E2E8F0`, acento no azul cirúrgico `#0284C7` e seleção no lavado celeste `#E0F2FE`.
+Recepcionista e corpo clínico, 8 horas por dia no balcão e nos consultórios, luz ambiente alta,
+monitor a ~70cm, telefone tocando, paciente na frente. Olhada de 1 a 3 segundos para responder:
+*quem chegou, quem está atrasado, o que eu clico agora*. No celular, o mesmo sistema serve quem
+confere a agenda no corredor.
+
+Daí saem as três decisões que mandam no resto:
+
+1. **Legibilidade a distância vence expressão.** Corpo a 15px e números com glifos
+   distintos; verificar contraste em cada superfície, nos dois temas.
+2. **Claro é o padrão** (luz alta), escuro é troca de token para o turno da noite. "Sistema" é a
+   preferência inicial.
+3. **O acento é ação, nunca enfeite.** Ação primária, seleção atual e foco. Estados da consulta
+   têm vocabulário próprio e nunca dependem só de cor.
+
+## Referências
+
+Base atual: **[Fluent 2, Microsoft](https://fluent2.microsoft.design/)**. Esta escolha
+substitui a direção Osha/Aurelien após o feedback do usuário sobre a paleta anterior.
+Azul oceano reservado a ações e seleção, fundos azul-gelo, área de trabalho branca,
+tipografia nativa e controles com cantos contidos formam a identidade comum.
+
+- [Tokens](https://fluent2.microsoft.design/design-tokens): valores globais e aliases
+  temáticos, aplicados por `applyFluentTheme` no `ThemeProvider`.
+- [Cor](https://fluent2.microsoft.design/color): hierarquia por superfície; cor de marca
+  nas ações, cores semânticas nas mensagens e estados.
+- [Tipografia](https://fluent2.microsoft.design/typography): Segoe UI e fallbacks nativos,
+  hierarquia regular/semibold, texto alinhado à esquerda e caixa de frase.
+- [Botões](https://fluent2.microsoft.design/components/web/react/core/button/usage):
+  um primário por contexto, estados interativos e foco perceptível.
+
+A landing usa a mesma base em uma composição própria: título à esquerda, painel à
+direita e demonstração por etapas. Imagens são capturas da aplicação com fixtures
+fictícios, identificados na página. Sem fotografias ou números comerciais inventados.
+
+Referências anteriores continuam informando a ergonomia dos fluxos:
+
+- **SimplePractice, Fresha, Mangomint, Square Appointments** (via Lazyweb, telas reais de agenda
+  e recepção): lista cronológica como superfície principal, detalhe em painel lateral sem perder
+  o contexto, estado da consulta como selo curto ao lado do nome.
+- **Epic / Apprentice Health** (agendamento hospitalar): o próximo passo como única ação primária
+  da linha; contagem do dia como atalho para filtro, não como troféu.
+Adaptação explícita: a fundação usa os tokens oficiais Fluent, mas layouts e componentes
+acessíveis pertencem ao ClinicFlow. Não afirmar uso integral de Fluent React nem réplica
+pixel a pixel de uma aplicação Microsoft. As referências de categoria orientam os fluxos.
 
 ## Tipografia
 
-Uma superfamília para display/leitura clínica e uma mono para dados operacionais.
+**Segoe UI** na interface, com fallbacks nativos publicados pelo Fluent, e **Atkinson
+Hyperlegible Mono** em hora, duração, telefone, CPF e contagens. Segoe usa a fonte
+instalada no sistema; Mono é auto-hospedada via `@fontsource`. Sem chamadas a serviços
+externos de fontes. Corpo a 15px e controles de toque a 16px adaptam a escala ao balcão.
 
-- **Plus Jakarta Sans / Inter** — títulos, rótulos, corpo, botões, nomes de pacientes.
-  Geometria limpa, kerning refinado, alta diferenciação de glifos para leitura rápida sob pressão.
-- **JetBrains Mono** — horas, durações, telefones, CPF, códigos e IDs de consulta.
-  Mono aqui é medição e estabilidade: alinha colunas cronológicas e impede salto de layout com `font-variant-numeric: tabular-nums`.
+Escala fixa (token semântico, nunca `text-sm`/`text-2xl`):
 
-Escala fixa (sem `clamp`), razão ~1.2:
-
-| Papel | px | peso | line-height |
-|---|---|---|---|
-| Hero (só no login) | 44 | 600 | 1.15 |
-| Título de tela | 30 | 700 | 1.15 |
-| Métrica | 28 | 700 | 1.15 |
-| Título de entidade | 24 | 600 | 1.15 |
-| Seção | 20 | 600 | 1.25 |
-| Subtítulo / card | 16 | 600 | 1.35 |
-| Corpo / linha de tabela | 14 | 400–600 | 1.45 |
-| Rótulo secundário | 13 | 400–600 | 1.45 |
-| Micro (cabeçalho de coluna, meta, kbd) | 11–12 | 600 | 1.45 |
-
-Piso absoluto: **11px** (apenas chips técnicos e atalhos kbd). Sem caixa-alta em rótulo, sem eyebrow, sem separador `•` em meta.
-
-## Cor — Letters Clinical Palette
-
-Restrained & Surgical. O acento é ação primária, seleção atual e estado — nunca decoração supérflua.
-
-```
-surface.base      #FFFFFF   cartões, painéis, modais (branco puro estéril)
-surface.app       #F8FAFC   fundo da aplicação (céu matinal suave)
-surface.sunken    #F1F5F9   trilhos, células secundárias, chips kbd
-border.subtle     #E2E8F0   divisórias de linha, hairline borders
-border.default    #CBD5E1   contornos de campo, inputs e foco
-ink.primary       #0F172A   nomes, horários, títulos (slate obsidian de alto contraste)
-ink.secondary     #475569   rótulos, apoio, especialidades médicas
-ink.tertiary      #94A3B8   meta, placeholder, dicas e timestamps
-accent.default    #0284C7   Surgical Blue: ação primária, seleção viva
-accent.hover      #0369A1   hover de ação primária
-accent.active     #075985   pressionado de ação primária
-accent.weak       #E0F2FE   Sky Tint: fundo do item de nav ativo, seleção na busca
-```
-
-Estados clínicos espelham a máquina de estados da consulta, um para um:
-
-```
-AGENDADA        #64748B   borda sutil, fundo transparente
-CONFIRMADA      #0284C7   Surgical Blue, fundo lavado #E0F2FE
-CHECK_IN/ESPERA #B45309   âmbar sobre pílula #FEF3C7 — ação imediata
-EM_ATENDIMENTO  #0369A1   azul cirúrgico profundo, fundo #E0F2FE
-CONCLUIDA       #15803D   verde clínico saudável, fundo #DCFCE7
-CANCELADA       #94A3B8   cinza ardósia terciário, fundo #F1F5F9
-ATRASADA        #E11D48   coral de emergência, fundo #FFE4E6
-```
-
-## Forma e espaço
-
-Grade de 4px. Raios cirúrgicos e proporcionais:
-- `6px` marcador, chips, kbd e tags
-- `8px` controles, botões e campos de input
-- `10px` itens de lista, dropdowns e elevações secundárias
-- `12px` cards principais, painéis e métricas
-- `16px` modais e drawers
-- Pílula (`rounded-full`) em selos de estado (`StatusBadge`).
-
-Elevação: sombras sutis com difusão limpa (`0 1px 3px rgba(15,23,42,0.04), 0 10px 25px -5px rgba(15,23,42,0.07)`), nunca halos coloridos artificiais.
-
-## Afordâncias de Teclado (Keyboard-first)
-
-O ClinicFlow opera com foco no operador de balcão:
-- **`⌘K` / `Ctrl+K`**: Abre a Paleta de Comandos Global a qualquer momento (Tela 18).
-- **`[N]`**: Nova consulta imediata.
-- **`[C]`**: Check-in direto na linha em foco da tabela.
-- **`[I]`**: Iniciar atendimento do paciente selecionado.
-- **`[S]`**: Alternar visão para a Sala de Espera.
-- **`[Esc]`**: Fechar drawers, modais ou cancelar seleção.
-- **`[↑ / ↓]`**: Navegação vertical entre linhas da tabela e itens da paleta de comandos.
-- **`[Desfazer Z]`**: Reverter última alteração operacional via Toast flutuante.
-
-## Componentes
-
-Sete famílias na biblioteca local do arquivo, 46 variantes, na prancheta `00 - Componentes`:
-
-| Família | Eixos | Variantes |
+| Token | px | Uso |
 |---|---|---|
-| Botão | Tipo (primário, secundário, destrutivo) × Estado | 18 |
-| Selo de estado | Estado (os 7 do `AppointmentStatus`) | 7 |
-| Campo | Estado (default, foco, erro, desabilitado) | 4 |
-| Item de navegação | Estado (default, hover, ativo) | 3 |
-| Linha de tabela | Estado (default, hover, selecionada) | 3 |
-| Toasts / Notificações | Tipo (Sucesso com desfazer, Conflito/Aviso, Erro de API) | 3 |
-| Kbd Badges | Teclas operacionais (`⌘K`, `Esc`, `C`, `I`, `N`, `S`, `↑↓`, `↵`) | 8 |
+| `text-hero` | 40 | só no painel da marca do login |
+| `text-title` / `text-title-sm` | 28 / 22 | título de tela (desktop / celular) |
+| `text-metric` / `text-metric-sm` | 26 / 20 | contagem |
+| `text-entity` | 24 | nome em destaque |
+| `text-section` | 18 | título de seção e de diálogo |
+| `text-card` | 16 | título de painel, nome na linha, hora |
+| `text-body` | 15 | corpo, linha de lista, campo |
+| `text-label` | 13 | rótulo de campo, meta secundária |
+| `text-micro` | 12 | selo, atalho, rodapé de bottom nav |
 
-Estado cobre default, hover, pressionado, foco, desabilitado e carregando. Se um estado não
-está aqui, ele não existe: não invente na tela.
+Piso de **12px** em rótulos e metadados. Na aplicação, evitar caixa-alta e eyebrow acima
+do título. A landing pode usar índices de seção para orientar a leitura. Campo em ponteiro
+grosso sobe para 16px (`text-input-touch`) para evitar zoom no foco em iOS.
 
-## Telas do Sistema (20 pranchetas)
+## Cor
 
-- **00 - Fundamentos.** Paleta, tokens, escala de tipografia, cores semânticas e ícones.
-- **00 - Componentes.** 7 famílias de componentes, 46 variantes incluindo Toasts e Kbd chips.
-- **01 - Login.** Acesso autenticado rápido por perfil.
-- **02 - Painel do dia.** Tabela cronológica completa com rodapé de paginação, seletor de densidade (Padrão/Compacto) e Toast flutuante de sucesso no canto inferior direito.
-- **02b - Painel do dia · 1280.** Adaptação estrutural para resolução de balcão compacto.
-- **03 - Agenda semanal.** Grade semanal com blocos cronológicos por profissional e legenda de status.
-- **04 - Detalhe da consulta.** Drawer lateral contextual com histórico completo de **Auditoria (Audit Trail)** rastreando quem alterou, quando e por qual canal.
-- **05 - Nova consulta.** Modal ágil com validação inline de horários e alerta de sobreposição.
-- **06 - Reagendar.** Painel lateral de 540px preservando a visão da grade de fundo.
-- **07 - Cancelar.** Painel lateral com registro obrigatório de motivo para auditoria.
-- **08 - Sala de espera.** Visão em tempo real da fila física, ordenada por tempo decrescente, métricas de espera média/máxima e rodapé sincronizado com chamador de TV.
-- **09 - Pacientes.** Tabela com busca indexada (⌘K), paginação e contagem total de registros.
-- **10 - Ficha do paciente.** Prontuário operacional com abas de consultas, exames e pendências.
-- **11 - Novo paciente.** Formulário simplificado de cadastro em 1 minuto.
-- **12 - Profissionais.** Gestão de corpo clínico, especialidades e status de atendimento.
-- **13 - Agenda do profissional.** Visão diária detalhada por sala e horário.
-- **14 - Documentos.** Repositório central de anexos e laudos.
-- **15 - Pendências e retornos.** Funil de acompanhamento pós-consulta para combate ao no-show.
-- **16 - Configurações.** Painel de gestão da clínica, horários de funcionamento e permissões.
-- **17 - Estados de sistema.** Estados de loading, empty states, e falhas reais com saídas de recuperação.
-- **18 - Paleta de comandos (⌘K).** Janela modal centralizada com busca unificada por paciente, profissional e ações rápidas sem uso de mouse.
+Azul oceano identifica ações e seleção; branco, azul-gelo e ardósia organizam as
+superfícies. Estados mantêm cores semânticas e ícones. Os valores oficiais resolvidos
+ficam em `lib/fluent-theme.ts`; superfícies frias, contorno forte e feedback clínico
+estão em `index.css`. Não adicionar cores soltas nos componentes.
 
-## Desvios registrados
-
-- **Selo de tipo de arquivo (`PDF`) e Kbd a 11px.** Únicos textos abaixo de 12px no arquivo.
-  São selos técnicos de formato e atalhos, não texto de leitura contínua.
-- **Scrim no Penpot vs Implementação Frontend:** No editor do Penpot, boards aninhados sobrepõem retângulos irmãos. No código React/Tailwind, o scrim deve ser implementado como overlay fixo de tela inteira (`fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50`).
-- **Ícones.** Quatro desenhados (fechar, seta, agenda, alerta), traço único de 1,6px em grade de 24. A paleta de comandos utiliza glifo vetorial ⌕ limpo para busca.
-
-## Armadilha da API do Penpot
-
-`shape.fontSize` devolve **string**. Comparar com `===` contra número falha em silêncio.
-Mudar `shape.fontSize` **não** altera texto cujo tamanho está fixado no range de caracteres — é preciso `shape.getRange(0, n).fontSize = x`.
-Coordenadas (`shape.x`, `shape.y`) são **globais do canvas**, mesmo para filhos de boards; filhos devem somar o `(x, y)` do pai.
-
-## Responsivo — 26 pranchetas (13 Mobile 390×844, 13 Tablet 768×1024)
-
-Mesma superfície, mesma máquina de estados, mesmo vocabulário. O que muda é a
-tradução estrutural, não o sistema.
-
-### Forks de layout resolvidos
-
-| Elemento | Desktop 1440 | Tablet 768 | Mobile 390 |
+| Token | Claro | Escuro | Papel |
 |---|---|---|---|
-| Navegação | Barra lateral rotulada 212px | Trilho de ícone 72px com rótulo curto | Bottom nav 5 destinos, 56px, fixa em `y=788` |
-| Tabela com ação por linha | Tabela | Tabela, linha de 56px | Pilha de cards, ação como botão de largura cheia |
-| Grade da agenda | 7 dias | 3 dias | Lista cronológica de um dia |
-| Drawer de detalhe | Lateral 480px | Lateral 400px sobre scrim `ink.primary` a 30% | Bottom sheet de altura cheia |
-| Modal | Modal centrado | Modal centrado | Sheet ancorado no rodapé |
-| Formulário de 2 colunas | 2 colunas | 2 colunas de 296px, calha de 24 | 1 coluna |
-| Paginação | Rodapé numerado (Pág. 1 de 104) | Rodapé numerado | Rolagem contínua — a contagem vive no subcabeçalho |
+| `surface-base` | `#FFFFFF` | `#292929` | painéis, diálogos |
+| `surface-app` | `#F1F6FA` | `#111D2A` | fundo e navegação |
+| `surface-sunken` | `#E9F2F8` | `#273744` | trilhos, chips, skeleton |
+| `border-subtle` / `default` | tokens `colorNeutralStroke2` / `1` | equivalentes escuros | divisórias |
+| `border-strong` | `#8794A3` | `#8794A3` | contorno de campo |
+| `ink-primary` | `#242424` | token `colorNeutralForeground1` | texto principal |
+| `ink-secondary` / `tertiary` | `#424242` / `#616161` | equivalentes escuros | apoio e metadados |
+| `accent` | `#0F6CBD` | `#115EA3` | ação primária com texto branco |
+| `accent-weak` / `accent-ink` | `#EBF3FC` / `#0F6CBD` | `#082338` / `#62ABF5` | seleção, item ativo |
+| `danger` · `warning` · `success` · `info` | + `-weak` | | feedback |
 
-### Escala responsiva
+Medir contraste ao alterar tokens: texto ≥4.5:1 e controles/campo ≥3:1 contra a
+superfície adjacente. A landing usa azul-gelo (`surface-marketing`, `#EAF4FB`), branco,
+tinta ardósia (`ink-marketing`, `#172C3E`) e ação azul em apresentação clara estável,
+inclusive quando a aplicação está em tema escuro. Campos usam `border-strong`; bordas
+sutis delimitam painéis e divisórias. Cores adicionais ficam centralizadas em `index.css`.
 
-Mesma escala do desktop com os dois degraus de topo rebaixados — 30px num board de
-390 come metade da largura útil:
+### Estados da consulta
 
-| Papel | Desktop | Responsivo |
+Um matiz **e um ícone** por estado. Concluída e cancelada recuam: já saíram da fila de trabalho.
+Só "aguardando" (check-in) é preenchido forte — é o único estado que pede ação imediata.
+
+| Estado | Ícone | Tinta / fundo (claro) |
 |---|---|---|
-| Título de tela | 30 | **24** |
-| Métrica | 28 | **20** |
-| Título de entidade | 24 | 24 |
-| Seção | 20 | 20 |
-| Subtítulo / card | 16 | 16 |
-| Corpo | 14 | 14 |
-| Rótulo secundário | 13 | 13 |
-| Micro | 11–12 | **12** |
+| Agendada | relógio | `#4F5B66`, contorno |
+| Confirmada | círculo com check | `#1D4FB8` / `#E6EEFC` |
+| Aguardando (CHECK_IN) | poltrona | `#7A4300` / `#FFE7B8` |
+| Em atendimento | estetoscópio | `#5B34B0` / `#EFE9FB` |
+| Concluída | check duplo | `#2F6B3F` / `#E5F2E8` |
+| Cancelada / Reagendada | proibido / repetir | `#5E6964` / `#EEF0EF` |
+| Atrasada (derivado) | triângulo | `#B42318` / `#FDE8E6` |
 
-**Piso de 12px, sem exceção** — o desvio de 11px do desktop (selo `PDF`, kbd) não
-vale em tela de mão. Distribuição atual: 12px ×962, 13 ×160, 14 ×102, 16 ×46,
-20 ×37, 24 ×15. Nenhum outro tamanho existe no arquivo.
+"Em atendimento" deixou de dividir o azul com "Confirmada": eram indistinguíveis na olhada.
 
-### Alvo de toque
+## Forma, espaço e elevação
 
-Todo controle interativo tem **44px de altura mínima**. Isso reescreveu a altura das
-linhas de tabela no tablet: 56px, com o botão de ação a 44 centrado. Onde a contagem de
-linhas não cabia mais no viewport, a lista foi truncada ao que cabe — a prancheta é o
-viewport, não o documento.
+Grade de 4px (escala do Tailwind). Raios: `marker` e `control` 4 (selo, kbd, botão, campo),
+`raised` 6 (menu, aviso), `card` e `modal` 8 (painel, diálogo, folha). Selo de estado é pílula.
 
-### Recorte de viewport
+Elevação com deslocamento e difusão, nunca halo colorido: `shadow-panel` (painel em repouso),
+`shadow-raised` (segmento ativo, menu), `shadow-overlay` (diálogo, toast). Larguras estruturais
+como token: `w-sidebar` 232, `w-rail` 84, `w-panel` 520, `h-bottom-nav` 64.
 
-Prancheta e contêiner de conteúdo com `clipContent`. O último card fica cortado pela
-bottom nav de propósito: é assim que rolagem se parece parada. Nada é desenhado fora
-dos limites da prancheta.
+Movimento: 150–250ms, só para mudança de estado (abrir folha, entrar toast). Sem coreografia de
+carregamento. `prefers-reduced-motion` zera tudo globalmente.
 
-### Ícones
+## Componentes (`apps/web/src/components/ui`)
 
-Doze desenhados, traço único de 1,6px em grade de 20: painel, agenda, pacientes,
-espera, mais, médicos, documentos, pendências, ajustes, fechar, voltar, busca,
-mais chevron (‹ ›) e relógio. Substituíram 140 emoji e glifos Unicode
-(👥 🩺 📄 🔔 ⚙ 🔍 📅 ⚠️ ⏱ ☰ ◫ ● ✕ ← › ‹) que a implementação responsiva usava como ícone.
+| Componente | Estados / notas |
+|---|---|
+| `Button`, `IconButton`, `ButtonLink`, `ButtonAnchor` | primário, secundário, ghost, destrutivo, destrutivo-ghost, link × sm/md/lg/icon. Hover, pressionado (desce 1px), foco, desabilitado, carregando (`aria-busy`, mantém largura). 44px em ponteiro grosso. Ícone sozinho exige `label`. |
+| `Field`, `PasswordField`, `SelectField`, `TextareaField`, `Switch` | Casca única: rótulo, `*` de obrigatório, dica ou erro ligado por `aria-describedby`, `aria-invalid`. Select com chevron. Senha com alternância acessível por teclado. |
+| `SegmentedControl` | Filtro de escolha única (radios de verdade), com contagem e tom. |
+| `Tabs` / `TabPanel` | Abas WAI-ARIA com roving tabindex, setas, Home/End. |
+| `Overlay` | Diálogo centrado ou painel lateral (`variant="sheet"`); vira folha inferior no celular. Portal, fundo `inert`, foco no primeiro campo, retorno de foco, Esc só na camada do topo, rolagem travada. |
+| `Menu` | Menu suspenso WAI-ARIA (setas, Esc, clique fora), fora do `overflow` da barra lateral. |
+| `Panel`, `PanelHeader`, `StatTile`, `DescriptionList`, `Avatar` | Superfícies. Nunca card dentro de card. |
+| `PageHeader`, `Section` | Um h1 por rota, caminho de volta, ações; atualiza o título da aba. |
+| `StatusBadge`, `Badge`, `Callout` | Selo de estado com ícone; etiqueta; aviso no fluxo (fundo tingido + ícone). |
+| `EmptyState`, `ErrorState`, `InlineError`, `Loading`, skeletons | Vazio ensina o próximo passo; erro nomeia o problema e a saída; carregamento com `aria-busy`. |
+| `Pagination` | Em todos os tamanhos (no celular, só anterior/próxima). |
+| `ToastProvider` | Sucesso, aviso, erro (erro fica 10s e é anunciado como `alert`). Pausa com ponteiro/foco, dispensável, `Desfazer [Z]`, ação de continuação. |
+| `ErrorBoundary` | Erro de renderização derruba só a área, com saída. |
 
-### Desvios do responsivo
+## Navegação e responsivo
 
-- **Trilho do tablet com rótulo curto** (`Docs`, `Pend.`, `Config`): 72px não comporta
-  a palavra inteira a 12px. É abreviação de trilho, não de conteúdo.
-- **Sala de espera não preenche o viewport.** Seis pessoas na fila é o número real; a
-  tela termina com `Fim da fila — 6 pacientes aguardando` e o rodapé do chamador de TV
-  ancorado embaixo. Encher a fila para preencher pixel seria mentir sobre a operação.
+| Elemento | Celular (<768) | Tablet (768–1023) | Desktop (≥1024) |
+|---|---|---|---|
+| Navegação | barra superior + bottom nav (Painel, Agenda, Espera, Pacientes, Mais) | trilho de ícones 84px com rótulo curto | barra lateral rotulada 232px em dois grupos |
+| Busca (⌘K) | ícone na barra superior | ícone no trilho | campo na barra lateral |
+| Nova consulta | botão no painel | botão no trilho | botão primário na barra lateral (`N`) |
+| Conta e tema | menu do avatar + "Mais" | menu do avatar | menu do usuário no rodapé da barra |
+| Lista com ação por linha | cartão com ação de largura cheia | linha em grade | linha em grade com coluna de estado |
+| Detalhe lateral / diálogo | folha inferior | painel lateral | painel lateral / diálogo centrado |
+| Paginação | anterior/próxima | numerada | numerada |
 
-## Implementação em código (`apps/web`)
+Atalhos: `⌘K`/`Ctrl K` busca, `N` nova consulta, `S` sala de espera, `Z` desfaz a última ação
+enquanto o aviso estiver na tela, `Esc` fecha a camada do topo. Atalhos de uma letra param em
+campo de texto e com sobreposição aberta. Link "Pular para o conteúdo" no topo.
 
-O arquivo Penpot é a especificação; `apps/web` é onde ela vira produto. Quando os
-dois divergirem, **o código vence** — é ele que a recepção usa.
-
-### Tokens
-
-`src/index.css`, bloco `@theme` do Tailwind v4. Os mesmos 41 tokens desta
-especificação, com os mesmos nomes: `surface.app` → `--color-surface-app` →
-`bg-surface-app`. Não existe cor literal em componente; se um hex aparecer num
-`className`, é bug.
-
-Escala tipográfica como token semântico (`text-body`, `text-metric`), não como
-`text-sm`/`text-2xl`. O degrau responsivo é explícito: `text-title-sm md:text-title`.
-
-### Fronteira com o backend
+## Fronteira com o backend
 
 O backend manda a tela quase pronta, e o front não recalcula nada disso:
 
 | Campo do DTO | O que o front faz com ele |
 |---|---|
 | `stateLabel` | Rótulo do selo, direto — "Atrasada 27min" |
-| `derivedState` | Cor do selo, incluindo `ATRASADA`, que não existe no Prisma |
+| `derivedState` | Cor e ícone do selo, incluindo `ATRASADA`, que não existe no Prisma |
 | `allowedTransitions` | **Quais botões existem na linha.** O front não conhece a máquina de estados |
-| `dueLabel`, `waitingLabel`, `summary` | Texto pronto, sem formatação no cliente |
+| `dueLabel`, `waitingLabel`, `summary`, `credential`, `typeLabel`, `sizeLabel` | Texto pronto |
 | `meta` de paginação | Rodapé "Mostrando 1–15 de 1.248" |
+| Resumo do balcão: `total`, `open`, `rescheduled`, `unconfirmed`, `nextArrival` | Contadores por filtro e próxima chegada, calculados no servidor |
 
-A ordem dos botões é do ciclo de vida (`CONFIRMADA → CHECK_IN → EM_ATENDIMENTO →
-CONCLUIDA`), e o primário é sempre o **passo seguinte**. Ordenar por urgência
-colocava "Check-in" como botão escuro numa consulta apenas agendada — com o
-paciente ainda em casa.
+A ordem dos botões é a do ciclo de vida (`CONFIRMADA → CHECK_IN → EM_ATENDIMENTO → CONCLUIDA`),
+e o primário é sempre o **passo seguinte**.
 
-### Decisões que só apareceram na implementação
+Datas e horas são exibidas no **fuso da clínica** (`settings.timezone`), não no do navegador:
+`features/appointments/labels.ts` concentra a formatação e a aritmética de dias.
 
-- **SSE sobre `fetch`, não `EventSource`.** O `JwtAuthGuard` só aceita
-  `Authorization: Bearer`, e `EventSource` não manda header. A alternativa seria
-  token na query, que vaza para log de acesso e proxy.
-- **Um refresh por vez.** Cinco queries paralelas recebendo 401 disparariam cinco
-  rotações; como o backend invalida o refresh usado, quatro derrubariam a sessão.
-- **`formatDate` montado à mão.** `toLocaleDateString("pt-BR", { month: "short" })`
-  devolve "11 de set. de 2026", que quebra em duas linhas na coluna da tabela.
-- **Paginação numerada não existe no mobile.** A contagem vive no subcabeçalho.
+## Decisões de implementação
 
-### Verificação
-
-`e2e-tests/visual.spec.ts` captura as telas com a API mockada, em 1440, 768 e 390.
-Foi assim que apareceram o telefone quebrando em duas linhas, o selo estourando a
-altura da linha e o card de métrica órfão — nenhum deles foi pego por asserção
-numérica. Screenshot é a verdade; medida numérica pega o que o olho perde.
-
-## Tema escuro
-
-Adicionado a pedido, sem mudar a decisão de cena de uso: o balcão sob luz alta
-continua sendo o padrão, e `system` é a preferência inicial. Quem pega o turno da
-noite herda a escolha do aparelho.
-
-O tema inteiro é troca de token. Nenhum componente tem variante `dark:`, porque
-nenhum componente conhece cor literal. Os overrides ficam no layer `theme`, que é
-onde o `@theme` do Tailwind emite os tokens: em `base` a ordem de camadas
-inverteria e o claro venceria sempre.
-
-Três estados, não dois: `data-theme="light"`, `data-theme="dark"` e a ausência do
-atributo, que segue o sistema. O `:root:not([data-theme="light"])` na media query
-impede que a preferência do SO atropele quem pediu claro na mão. Um script inline
-no `index.html` aplica o atributo antes da primeira pintura.
-
-O que não muda de tema: o selo de espera. Âmbar sólido com tinta escura é legível
-nos dois, e ele é o único estado preenchido do sistema.
-
-No escuro o acento clareia (`#0B5C63` → `#58B6BE`) e, junto com ele,
-`ink.onaccent` escurece. É por isso que a cor do texto sobre o acento é um token
-e não `text-white`.
+- **SSE sobre `fetch`, não `EventSource`.** O `JwtAuthGuard` só aceita `Authorization: Bearer`, e
+  `EventSource` não manda header. Um 401 no stream renova o token uma vez; se persistir, espera o
+  backoff em vez de girar o refresh em loop.
+- **Um refresh por vez.** Cinco queries recebendo 401 disparariam cinco rotações.
+- **Restaurar sessão não desloga por rede.** Só um 4xx de `/auth/me` encerra a sessão; rede caída
+  ou 5xx mostra "Sem conexão" com tentar de novo.
+- **Login volta para o endereço pedido** (deep link preservado no redirecionamento).
+- **Erros normalizados.** `ApiError.fieldErrors()` lê `details.issues` do Zod e do class-validator;
+  resposta HTML de proxy e rede caída viram `ApiError` com mensagem útil.
+- **Telas carregadas sob demanda** (`React.lazy`): o balcão abre no painel sem baixar o resto.
+- **Detalhe contextual de consulta.** Links de listas guardam `backgroundLocation`: a consulta
+  abre em folha e mantém filtro, página e contexto atrás. Links diretos continuam sendo páginas.
+  Cancelar, editar e reagendar substituem a folha de detalhe; nunca empilham formulários.
+- **Página após uma transição.** Quando o último item sai do filtro, a lista volta à última
+  página válida. Esse ajuste aguarda o fechamento do detalhe para não interromper a tarefa.
+- **Prévias de documentos.** PDF e imagem abrem em folha, com carregamento, erro e nova tentativa.
+  Download mantém o nome original. A URL temporária do arquivo é revogada ao fechar.
+- **Densidade operacional.** Resumos usam linhas compactas; avatares e posições da fila usam
+  superfícies neutras. A cor de ação continua reservada ao próximo passo.
+- **Tema resolvido no `data-theme`.** Um único bloco de tokens escuros; o script de `index.html`
+  resolve "sistema" antes da primeira pintura, e a `theme-color` acompanha.
 
 ## A armadilha do tailwind-merge
 
-`cn()` usa `twMerge`, que resolve conflito de utilitárias pelo grupo da classe.
-Ele não conhece a escala do projeto: para ele `text-card` (tamanho) e
-`text-ink-onaccent` (cor) caem no mesmo grupo, viram conflito, e só o último
-sobrevive. Resultado: **todo botão primário e destrutivo perdia a cor do texto** e
-herdava o `color` do body, texto quase preto sobre o acento escuro.
-
-A correção é declarar a escala em `extendTailwindMerge` (`lib/utils.ts`). Vale
-para qualquer token novo em `font-size`, `shadow` e `rounded`: se ele não estiver
-lá, o merge vai tratá-lo como cor.
-
-Regressão coberta em `components/ui/__tests__/button.test.tsx`.
+`cn()` usa `twMerge`, que resolve conflito pelo grupo da classe e não conhece a escala do projeto:
+para ele `text-card` (tamanho) e `text-ink-onaccent` (cor) caem no mesmo grupo e só o último
+sobrevive. Todo token novo de `font-size`, `shadow` ou `rounded` precisa entrar em
+`extendTailwindMerge` (`lib/utils.ts`). Regressão coberta em `button.test.tsx`.
 
 ## Recuperação de senha
 
-Fluxo novo, com endpoint novo no backend (`POST /auth/forgot-password` e
-`POST /auth/reset-password`).
+`POST /auth/forgot-password` responde 202 exista ou não a conta (a tela não vira enumerador de
+quem trabalha na clínica). Token guardado só como hash, 30 minutos, pedido novo invalida os
+anteriores, e trocar a senha revoga as sessões — inclusive a local, que é encerrada antes de
+voltar ao login com o aviso "Senha alterada".
 
-- O pedido responde 202 exista ou não a conta. Dizer "e-mail não encontrado" num
-  formulário público transforma a tela num enumerador de quem trabalha na clínica.
-- Token guardado só como hash, igual ao refresh, com validade de 30 minutos.
-- Pedido novo invalida os anteriores.
-- Trocar a senha revoga as sessões abertas: se o pedido veio de um acesso
-  indevido, a troca precisa expulsar quem já estava dentro.
-- O envio usa `MailService`, com o mesmo desenho do transporte de notificação:
-  `log` em desenvolvimento, pluggável em produção.
+## Armadilha da API do Penpot
+
+`shape.fontSize` devolve **string**. Mudar `shape.fontSize` não altera texto cujo tamanho está
+fixado no range de caracteres — use `shape.getRange(0, n).fontSize = x`. Coordenadas são globais
+do canvas, mesmo para filhos de boards.
+
+## Verificação
+
+- `pnpm --filter web test` — unitários (botão/merge, selo, overlay, abas, paginação, cliente da
+  API, datas no fuso da clínica, ações da consulta).
+- `pnpm --filter web test:e2e` — fumaça sem backend e capturas com API mockada (`shots/`).
+- `e2e-tests/.shots-crawl.mjs` — ferramenta local: entra na API real e fotografa cada rota em
+  1440/768/390, apontando erro de console, requisição falha e rolagem horizontal.
+- `e2e-tests/redesign.spec.ts` — matriz das rotas em três larguras e dois temas, filtros,
+  atalhos, navegação móvel, prévias e consulta contextual sem diálogos empilhados.
+- [Relatório do redesign](docs/REDESIGN-VALIDATION.md) — mudanças, validação e evidências locais.

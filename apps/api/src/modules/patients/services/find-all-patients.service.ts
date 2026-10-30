@@ -50,11 +50,16 @@ export class FindAllPatientsService {
 
     if (options.search) {
       const term = options.search.trim();
-      where.OR = [
-        { name: { contains: term, mode: "insensitive" } },
-        { cpf: { contains: term.replace(/\D/g, "") } },
-        { phone: { contains: term.replace(/\D/g, "") } },
-      ];
+      const digits = term.replace(/\D/g, "");
+      where.OR = [{ name: { contains: term, mode: "insensitive" } }];
+      // Só busca por CPF/telefone quando o termo tem dígitos de verdade: um
+      // nome vira `contains: ""` depois do replace, e isso casa com todo mundo.
+      if (digits.length >= 3) {
+        where.OR.push(
+          { cpf: { contains: digits } },
+          { phone: { contains: digits } },
+        );
+      }
     }
 
     if (options.hasPendencies) {

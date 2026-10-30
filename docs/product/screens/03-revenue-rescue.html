@@ -1,0 +1,1106 @@
+<title>ClinicFlow Centro de Resgate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky glass header → KPIs de resgate → filtros → 3 painéis (conversas | linha do tempo | fila de espera).
+   Tokens are RGB triplets so Tailwind can apply alpha (bg-ok/10, border-fg/[0.08]). */
+:root {
+  --bg: 251 251 253;      /* off-white editorial */
+  --surface: 255 255 255;
+  --sunken: 244 244 247;
+  --fg: 17 17 22;
+  --muted: 92 92 106;
+  --faint: 140 140 155;
+  --ok: 5 150 105;        /* esmeralda: fluxo positivo, receita */
+  --ai: 79 70 229;        /* índigo: Copilot, inteligência */
+  --warn: 180 83 9;       /* âmbar: atenção, atraso */
+  --bad: 225 29 72;       /* carmim: desistência, estouro */
+  --font-ui: "Geist", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-data: "Geist Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: 9 9 11; --surface: 18 18 21; --sunken: 14 14 17; --fg: 244 244 246;
+    --muted: 161 161 170; --faint: 113 113 122;
+    --ok: 16 185 129; --ai: 129 140 248; --warn: 251 191 36; --bad: 251 113 133;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: 9 9 11; --surface: 18 18 21; --sunken: 14 14 17; --fg: 244 244 246;
+  --muted: 161 161 170; --faint: 113 113 122;
+  --ok: 16 185 129; --ai: 129 140 248; --warn: 251 191 36; --bad: 251 113 133;
+  color-scheme: dark;
+}
+html, body { background: rgb(var(--bg)); color: rgb(var(--fg)); }
+body { font-family: var(--font-ui); font-size: 14px; -webkit-font-smoothing: antialiased; }
+.tnum { font-variant-numeric: tabular-nums; }
+@keyframes enter { from { opacity: 0; transform: translateY(4px) scale(.99); } to { opacity: 1; transform: none; } }
+@keyframes flash { 0% { background: rgb(var(--ok) / .16); } 100% { background: transparent; } }
+@keyframes pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+.anim-enter { animation: enter .28s cubic-bezier(.2,.8,.2,1) both; }
+.anim-flash { animation: flash 1.6s ease-out both; }
+.anim-pop { animation: pop .22s cubic-bezier(.2,.8,.2,1) both; }
+.anim-dot { animation: dot 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .anim-enter, .anim-flash, .anim-pop, .anim-dot, .animate-ping, .animate-pulse { animation: none !important; }
+  * { transition: none !important; }
+}
+#boot { padding: 48px 16px; color: rgb(var(--muted)); font: 14px/1.5 var(--font-ui); }
+</style>
+
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg: "rgb(var(--bg) / <alpha-value>)",
+          surface: "rgb(var(--surface) / <alpha-value>)",
+          sunken: "rgb(var(--sunken) / <alpha-value>)",
+          fg: "rgb(var(--fg) / <alpha-value>)",
+          muted: "rgb(var(--muted) / <alpha-value>)",
+          faint: "rgb(var(--faint) / <alpha-value>)",
+          ok: "rgb(var(--ok) / <alpha-value>)",
+          ai: "rgb(var(--ai) / <alpha-value>)",
+          warn: "rgb(var(--warn) / <alpha-value>)",
+          bad: "rgb(var(--bad) / <alpha-value>)",
+        },
+        fontFamily: {
+          sans: ["Geist", "ui-sans-serif", "system-ui", "Segoe UI", "sans-serif"],
+          mono: ['"Geist Mono"', "ui-monospace", "SFMono-Regular", "Consolas", "monospace"],
+        },
+      },
+    },
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script>window.react = window.React;</script>
+<script src="https://unpkg.com/lucide-react@0.454.0/dist/umd/lucide-react.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+
+<div id="root"><div id="boot">Carregando o Centro de Resgate…</div></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* ───────────────────────── helpers ───────────────────────── */
+const Icon = ({ n, size = 16, className = "", sw = 1.75 }) => {
+  const C = window.LucideReact && window.LucideReact[n];
+  return C
+    ? <C size={size} strokeWidth={sw} className={className} aria-hidden="true" />
+    : <span aria-hidden="true" className={"inline-block shrink-0 " + className} style={{ width: size, height: size }} />;
+};
+const pad = (n) => String(n).padStart(2, "0");
+const T = (h, m, s = 0) => h * 3600 + m * 60 + s;
+const hm = (s) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}`;
+const hms = (s) => `${hm(s)}:${pad(Math.floor(s % 60))}`;
+const mmss = (s) => { s = Math.max(0, Math.floor(s)); return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; };
+const brl = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
+const first = (name) => name.split(" ")[0];
+const initials = (name) => name.split(" ").filter((w) => w.length > 2).slice(0, 2).map((w) => w[0]).join("");
+const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const cx = (...a) => a.filter(Boolean).join(" ");
+const ago = (now, t) => { const d = Math.max(0, now - t); if (d < 60) return "agora"; if (d < 3600) return `há ${Math.floor(d / 60)} min`; return `há ${Math.floor(d / 3600)} h`; };
+const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ───────────────────────── mock: Clínica Vértice ───────────────────────── */
+const CLINIC = "Clínica Vértice";
+const BASE_DATE = new Date(2026, 9, 9);
+const START = T(10, 42, 0);
+const TOMORROW = "sáb 10/10";
+const CONV_TICKET = 220; // ticket médio de convênio usado na receita protegida
+
+const DOCS = {
+  helena: { name: "Dra. Helena Prado", short: "Dra. Helena", spec: "Dermatologia", room: "Sala 1", color: "#8B5CF6" },
+  ramos: { name: "Dr. Rafael Ramos", short: "Dr. Ramos", spec: "Ortopedia", room: "Sala 2", color: "#0EA5E9" },
+  okada: { name: "Dra. Beatriz Okada", short: "Dra. Okada", spec: "Cardiologia", room: "Sala 3", color: "#EC4899" },
+  menezes: { name: "Dr. Thiago Menezes", short: "Dr. Menezes", spec: "Endocrinologia", room: "Sala 4", color: "#14B8A6" },
+};
+const conv = (label) => ({ kind: "conv", label });
+const part = (value) => ({ kind: "part", label: "Particular", value });
+
+const STATES = {
+  confirmado: { label: "Confirmado", tone: "ok", icon: "CalendarCheck" },
+  reagendado: { label: "Reagendado pela IA", tone: "ai", icon: "Sparkles" },
+  aguardando: { label: "Aguardando", tone: "muted", icon: "Clock" },
+  humano: { label: "Precisa de humano", tone: "warn", icon: "Hand" },
+};
+
+/* mensagens: k = sys | in | out | human */
+const sys = (t, icon, tone, text) => ({ k: "sys", t, icon, tone, text });
+const inn = (t, text) => ({ k: "in", t, text });
+const out = (t, text, reasoning) => ({ k: "out", t, text, reasoning });
+
+const reminder = (c) => `Olá, ${first(c.name)}! Aqui é o assistente da ${CLINIC}. Sua consulta com ${DOCS[c.doc].name} é amanhã, sábado 10/10, às ${hm(c.time)}. Confirma presença? Responda 1 para confirmar ou 2 para remarcar.`;
+
+const confirmedThread = (c, extra = []) => [
+  sys(T(8, 0), "Send", "muted", "Lembrete de confirmação enviado · modelo 24h"),
+  out(T(8, 0), reminder(c)),
+  ...extra,
+  inn(c.at, c.reply || "1"),
+  sys(c.at, "CalendarCheck", "ok", "Presença confirmada · agenda atualizada sem intervenção humana"),
+  out(c.at + 4, `Confirmado, ${first(c.name)}! Te esperamos amanhã às ${hm(c.time)}. Chegue 10 minutos antes para o check-in.`),
+];
+
+const rescheduledThread = (c) => [
+  sys(T(8, 0), "Send", "muted", "Lembrete de confirmação enviado · modelo 24h"),
+  out(T(8, 0), reminder(c)),
+  inn(c.at - 160, c.ask),
+  sys(c.at - 150, "MessageCircle", "ai", `Intenção detectada: remarcar · preferência: ${c.pref}`),
+  out(c.at - 120, c.offer, c.reasoning),
+  inn(c.at - 20, c.pick),
+  sys(c.at, "CalendarCheck", "ok", `Consulta remarcada: ${hm(c.time)} → ${c.to}`),
+  sys(c.at, "Database", "ai", `Agenda atualizada · vaga ${hm(c.time)} liberada para o Smart Fill`),
+  out(c.at + 5, `Pronto, ${first(c.name)}! Remarcado para ${c.to} com ${DOCS[c.doc].short}. Qualquer coisa é só chamar.`),
+];
+
+const HAND = [
+  // live: toca sozinha a partir de 10:42
+  { id: "paula", name: "Paula Siqueira", time: T(14, 30), doc: "helena", type: "Consulta", payer: conv("Unimed"), state: "aguardando", lastAt: T(8, 0), lastRead: T(8, 14),
+    msgs: [sys(T(8, 0), "Send", "muted", "Lembrete de confirmação enviado · modelo 24h"), out(T(8, 0), reminder({ name: "Paula Siqueira", doc: "helena", time: T(14, 30) })), sys(T(8, 14), "CheckCheck", "muted", "Lida pela paciente")] },
+  // escalação: pergunta de preço
+  { id: "marcelo", name: "Marcelo Tavares", time: T(10, 0), doc: "helena", type: "Consulta · possível crioterapia", payer: conv("Bradesco Saúde"), state: "humano", lastAt: T(10, 31),
+    msgs: [
+      sys(T(8, 0), "Send", "muted", "Lembrete de confirmação enviado · modelo 24h"),
+      out(T(8, 0), reminder({ name: "Marcelo Tavares", doc: "helena", time: T(10, 0) })),
+      inn(T(10, 30), "1"),
+      sys(T(10, 30), "CalendarCheck", "ok", "Presença confirmada · agenda atualizada"),
+      inn(T(10, 31), "Quanto fica a crioterapia das verrugas? É coberto pelo plano?"),
+      sys(T(10, 31), "TriangleAlert", "warn", "Escalado para humano · motivo: pergunta sobre preço e cobertura (fora da política do Copilot)"),
+      out(T(10, 31), "Boa pergunta, Marcelo. Vou pedir para a equipe da recepção te responder sobre valores e cobertura em instantes.", "Política: o Copilot não informa preço de procedimento nem interpreta cobertura de convênio. Tarefa aberta para a recepção com prioridade alta."),
+    ] },
+  // reagendados pela IA
+  { id: "gabriel", name: "Gabriel Antunes", time: T(11, 0), doc: "ramos", type: "Retorno", payer: conv("Amil"), state: "reagendado", lastAt: T(8, 21), to: "seg 12/10 · 15:00",
+    ask: "2", pref: "semana que vem, à tarde", offer: "Sem problema, Gabriel. Tenho estes horários com o Dr. Ramos: segunda 12/10 às 15:00 ou quarta 14/10 às 16:30. Qual prefere?", pick: "Segunda 15h", at: T(8, 21),
+    reasoning: "Considerou: respondeu 2 e disse “semana que vem de tarde” em conversa anterior, convênio Amil (grade liberada), Dr. Ramos tem 2 vagas à tarde até quarta." },
+  { id: "renato", name: "Renato Figueira", time: T(8, 30), doc: "menezes", type: "Retorno · HbA1c", payer: conv("Unimed"), state: "reagendado", lastAt: T(8, 47), to: "sáb 10/10 · 11:30",
+    ask: "8:30 é muito cedo pra mim, consigo mais tarde no mesmo dia?", pref: "mesmo dia, mais tarde", offer: "Consigo sim, Renato. Com o Dr. Menezes amanhã tem 11:30 ou 12:00. Qual fica melhor?", pick: "11:30", at: T(8, 47),
+    reasoning: "Considerou: pedido explícito de “mais tarde no mesmo dia”, exame HbA1c já laudado, Dr. Menezes tem 2 vagas na manhã de sábado." },
+  { id: "simone", name: "Simone Dutra", time: T(15, 0), doc: "okada", type: "Consulta", payer: part(450), state: "reagendado", lastAt: T(9, 5), to: "ter 13/10 · 09:00",
+    ask: "Vou ter que remarcar, surgiu um compromisso.", pref: "manhã (histórico)", offer: "Claro, Simone. Com a Dra. Okada tenho terça 13/10 às 09:00 ou quinta 15/10 às 08:30. Qual prefere?", pick: "Terça 9h, obrigada!", at: T(9, 5),
+    reasoning: "Considerou: últimas 3 consultas foram de manhã, particular (sem restrição de grade), Dra. Okada tem 2 vagas de manhã na semana." },
+  // confirmados com história
+  { id: "ana", name: "Ana Carolina Melo", time: T(9, 0), doc: "helena", type: "Consulta", payer: conv("Unimed"), state: "confirmado", lastAt: T(8, 3), at: T(8, 3) },
+  { id: "joana", name: "Joana Prates", time: T(10, 30), doc: "okada", type: "Primeira consulta", payer: conv("SulAmérica"), state: "confirmado", lastAt: T(8, 9), at: T(8, 9), reply: "1. Qual o endereço mesmo?",
+    extraAfter: [out(T(8, 9) + 6, "Rua das Figueiras, 410 · 3º andar, Sala 3. Tem estacionamento conveniado no mesmo prédio.")] },
+  { id: "vinicius", name: "Vinícius Lobo", time: T(8, 0), doc: "ramos", type: "Retorno", payer: part(400), state: "confirmado", lastAt: T(8, 1), at: T(8, 1) },
+  { id: "dalva", name: "Dalva Moreira", time: T(11, 30), doc: "menezes", type: "Consulta", payer: conv("Unimed"), state: "confirmado", lastAt: T(8, 35), at: T(8, 35), reply: "1, vou com minha filha" },
+  { id: "heitor", name: "Heitor Vilela", time: T(13, 0), doc: "okada", type: "Retorno · ECG", payer: conv("Bradesco Saúde"), state: "confirmado", lastAt: T(8, 12), at: T(8, 12) },
+  { id: "luana", name: "Luana Ferraz", time: T(16, 0), doc: "helena", type: "Procedimento · peeling", payer: part(680), state: "confirmado", lastAt: T(9, 40), at: T(9, 40) },
+  { id: "rodrigo", name: "Rodrigo Pacheco", time: T(9, 30), doc: "ramos", type: "Avaliação", payer: part(400), state: "confirmado", lastAt: T(10, 38), at: T(10, 38),
+    extraBefore: [sys(T(8, 14), "CheckCheck", "muted", "Lida pelo paciente"), sys(T(10, 0), "Send", "muted", "Sem resposta em 2 h · 2º lembrete enviado"), out(T(10, 0), "Oi, Rodrigo! Só confirmando: consulta amanhã às 09:30 com o Dr. Ramos. Responda 1 se estiver tudo certo.")] },
+];
+
+const GEN_NAMES = ["Beatriz Lemos", "Cláudio Portela", "Daniela Fontes", "Érico Salles", "Fabiana Queiroz", "Gilberto Nunes", "Ingrid Carvalho", "Jorge Amado Filho", "Kátia Bueno", "Leandro Matos", "Marina Esteves", "Nelson Prado", "Olívia Santana", "Paulo Roberto Dias", "Quitéria Lopes", "Rafaela Mesquita", "Sérgio Toledo", "Tatiana Brito", "Ubirajara Cruz", "Valéria Pontes", "Wagner Simões", "Yara Fontoura"];
+const GEN_PAYERS = [conv("Unimed"), part(400), conv("Bradesco Saúde"), conv("SulAmérica"), part(450), conv("Amil"), conv("Porto Saúde")];
+const DOC_IDS = Object.keys(DOCS);
+const GEN = GEN_NAMES.map((name, i) => ({
+  id: "g" + i, name, time: T(8 + Math.floor(i / 3), (i % 3) * 20), doc: DOC_IDS[i % 4], type: ["Consulta", "Retorno", "Avaliação"][i % 3], payer: GEN_PAYERS[i % GEN_PAYERS.length],
+  state: "confirmado", lastAt: T(8, 2 + (i * 7) % 110), at: T(8, 2 + (i * 7) % 110),
+}));
+
+function buildConv(c) {
+  let msgs = c.msgs;
+  if (!msgs) {
+    if (c.state === "reagendado") msgs = rescheduledThread(c);
+    else { msgs = confirmedThread(c, c.extraBefore || []); if (c.extraAfter) msgs = msgs.concat(c.extraAfter); }
+  }
+  const last = [...msgs].reverse().find((m) => m.k !== "sys");
+  return { ...c, day: "amanha", msgs, typing: null, human: false, preview: last ? last.text : "" };
+}
+const INITIAL_CONVS = [...HAND, ...GEN].map(buildConv);
+
+// Conversa do Smart Fill (hoje), aberta a partir da fila de espera.
+const EDUARDO = {
+  id: "eduardo", name: "Eduardo Brandão", time: T(15, 30), doc: "okada", type: "Consulta · palpitações", payer: conv("Unimed"), state: "aguardando", lastAt: T(10, 41), day: "hoje", human: false, typing: null,
+  preview: "Oferta de vaga 15:30 enviada",
+  msgs: [
+    sys(T(10, 39), "CalendarX2", "bad", "Cláudia Reis desmarcou 15:30 com a Dra. Okada · Smart Fill iniciado"),
+    sys(T(10, 39), "Zap", "ai", "Eduardo é o 1º da fila: prioridade alta · palpitações · Unimed"),
+    out(T(10, 39), "Olá, Eduardo! Abriu uma vaga hoje às 15:30 com a Dra. Beatriz Okada (Cardiologia). Você está na nossa lista de espera com prioridade. Quer ficar com esse horário? Responda SIM para confirmar.", "Considerou: sintoma reportado (palpitações) eleva prioridade, convênio Unimed cobre a consulta, paciente marcou “aceita encaixe” e mora a 15 min da clínica."),
+    sys(T(10, 41), "CheckCheck", "muted", "Lida pelo paciente"),
+  ],
+};
+
+/* lista de espera */
+const WAIT_INITIAL = [
+  { id: "w1", name: "Otávio Reis", urgency: "alta", proc: "Retorno · ecocardiograma", doc: "okada", period: "qualquer período", since: 6, score: 0.92, payer: conv("Unimed"), fit: true },
+  { id: "w2", name: "Tereza Lins", urgency: "alta", proc: "Lesão suspeita · avaliação", doc: "helena", period: "manhã", since: 3, score: 0.88, payer: part(450), fit: false },
+  { id: "w3", name: "Lívia Martins", urgency: "media", proc: "Check-up cardiológico", doc: "okada", period: "tarde", since: 9, score: 0.7, payer: conv("Bradesco Saúde"), fit: true },
+  { id: "w4", name: "Felipe Arruda", urgency: "media", proc: "Infiltração · joelho", doc: "ramos", period: "qualquer período", since: 4, score: 0.64, payer: part(600), fit: false },
+  { id: "w5", name: "Nair Cordeiro", urgency: "media", proc: "Retorno · tireoide", doc: "menezes", period: "manhã", since: 12, score: 0.58, payer: conv("Unimed"), fit: true },
+  { id: "w6", name: "Bruno Sales", urgency: "flex", proc: "Consulta", doc: "helena", period: "qualquer período", since: 2, score: 0.35, payer: conv("SulAmérica"), fit: false },
+  { id: "w7", name: "Ione Barreto", urgency: "flex", proc: "Check-up", doc: "okada", period: "tarde", since: 15, score: 0.3, payer: part(380), fit: true },
+  { id: "w8", name: "Caio Mendonça", urgency: "flex", proc: "Retorno", doc: "ramos", period: "qualquer período", since: 1, score: 0.22, payer: conv("Amil"), fit: true },
+];
+const URGENCY = [
+  { id: "alta", label: "Alta", tone: "bad", sub: "sintoma ativo ou prazo clínico" },
+  { id: "media", label: "Média", tone: "warn", sub: "retorno ou procedimento eletivo" },
+  { id: "flex", label: "Flexível", tone: "muted", sub: "aceita qualquer data" },
+];
+
+const SF_INITIAL = {
+  status: "running", openedAt: T(10, 39, 0), filledAt: null, slot: "15:30", doc: "okada", cancelledBy: "Cláudia Reis",
+  candidates: [
+    { name: "Eduardo Brandão", reason: "Prioridade alta · palpitações · Unimed", status: "lido" },
+    { name: "Lívia Martins", reason: "Check-up · flexível à tarde", status: "enviado" },
+    { name: "Otávio Reis", reason: "Retorno ecocardiograma", status: "fila" },
+  ],
+  events: [
+    { t: T(10, 39), icon: "CalendarX2", tone: "bad", text: "Cláudia Reis desmarcou pelo WhatsApp" },
+    { t: T(10, 39), icon: "Send", tone: "ai", text: "Oferta enviada a Eduardo Brandão (1º da fila)" },
+    { t: T(10, 40), icon: "Send", tone: "ai", text: "Oferta enviada a Lívia Martins (2ª)" },
+    { t: T(10, 41), icon: "CheckCheck", tone: "muted", text: "Eduardo leu a mensagem" },
+  ],
+};
+
+const FILTERS = [
+  { id: "all", label: "Todas", k: "1" },
+  { id: "humano", label: "Precisa de humano", k: "2" },
+  { id: "reagendado", label: "Reagendadas", k: "3" },
+  { id: "confirmado", label: "Confirmadas", k: "4" },
+  { id: "aguardando", label: "Sem resposta", k: "5" },
+];
+
+/* ───────────────────────── small UI atoms ───────────────────────── */
+const DOT = { ai: "bg-ai", ok: "bg-ok", warn: "bg-warn", bad: "bg-bad", fg: "bg-fg/70", muted: "bg-faint" };
+const TEXT = { ai: "text-ai", ok: "text-ok", warn: "text-warn", bad: "text-bad", fg: "text-fg", muted: "text-muted" };
+
+function Pulse({ tone = "ok", live = true }) {
+  return (
+    <span className="relative flex h-2 w-2 shrink-0">
+      {live && <span className={cx("absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping", DOT[tone])} />}
+      <span className={cx("relative inline-flex h-2 w-2 rounded-full", DOT[tone])} />
+    </span>
+  );
+}
+
+function Kbd({ children, className = "" }) {
+  return (
+    <kbd className={cx("inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] border border-fg/[0.12] bg-surface px-1 font-mono text-[11px] font-medium leading-none text-muted shadow-[0_1px_0_rgb(var(--fg)/0.06)]", className)}>
+      {children}
+    </kbd>
+  );
+}
+
+function DocTag({ id }) {
+  const d = DOCS[id];
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: d.color }} />
+      <span className="truncate">{d.short}</span>
+    </span>
+  );
+}
+
+function Avatar({ name, size = 32 }) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center rounded-full border border-fg/[0.08] bg-sunken text-[11px] font-semibold tracking-wide text-fg/80"
+      style={{ width: size, height: size }}
+      aria-hidden="true"
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+function Payer({ payer }) {
+  return payer.kind === "part"
+    ? <span className="text-[12px] text-muted">Particular · <span className="font-mono tnum text-fg/80">{brl(payer.value)}</span></span>
+    : <span className="text-[12px] text-muted">{payer.label}</span>;
+}
+
+function Chip({ tone = "muted", icon, children, className = "" }) {
+  const map = {
+    ai: "bg-ai/[0.08] text-ai border-ai/20",
+    ok: "bg-ok/[0.08] text-ok border-ok/20",
+    warn: "bg-warn/[0.08] text-warn border-warn/25",
+    bad: "bg-bad/[0.08] text-bad border-bad/25",
+    muted: "bg-sunken text-muted border-fg/[0.08]",
+  };
+  return (
+    <span className={cx("inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-[3px] text-[12px] font-medium leading-none", map[tone], className)}>
+      {icon && <Icon n={icon} size={12} sw={2} />}
+      <span className="truncate">{children}</span>
+    </span>
+  );
+}
+
+function Meter({ value, tone = "ok" }) {
+  return (
+    <div className="h-1 w-full overflow-hidden rounded-full bg-fg/[0.06]" role="presentation">
+      <div className={cx("h-full rounded-full transition-[width] duration-700 ease-out", DOT[tone])} style={{ width: `${Math.min(100, Math.max(2, value * 100))}%` }} />
+    </div>
+  );
+}
+
+function StateChip({ state, human }) {
+  if (human) return <Chip tone="fg" icon="UserRound" className="border-fg/20 bg-fg/[0.06] text-fg">Humano no controle</Chip>;
+  const s = STATES[state];
+  return <Chip tone={s.tone} icon={s.icon}>{s.label}</Chip>;
+}
+
+function Btn({ primary, children, className = "", ...rest }) {
+  return (
+    <button type="button" {...rest}
+      className={cx("inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 disabled:cursor-not-allowed disabled:opacity-50",
+        primary ? "border-fg/90 bg-fg text-bg hover:bg-fg/85" : "border-fg/[0.1] bg-surface text-fg/80 hover:bg-sunken", className)}>
+      {children}
+    </button>
+  );
+}
+
+/* ───────────────────────── header ───────────────────────── */
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => {
+    const t = document.documentElement.dataset.theme;
+    return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+  const toggle = () => { const next = !dark; document.documentElement.dataset.theme = next ? "dark" : "light"; setDark(next); };
+  useEffect(() => { window.__toggleTheme = toggle; });
+  return (
+    <button type="button" onClick={toggle} aria-label={dark ? "Usar tema claro" : "Usar tema escuro"}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-fg/[0.08] text-muted transition-colors hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">
+      <Icon n={dark ? "Sun" : "Moon"} size={15} />
+    </button>
+  );
+}
+
+function Header({ now, openCount, autonomy, onOpenPalette, onNavigate }) {
+  const label = BASE_DATE.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  const nav = [
+    { id: "cockpit", label: "Cockpit", icon: "LayoutGrid" },
+    { id: "agenda", label: "Agenda", icon: "CalendarDays" },
+    { id: "comms", label: "Comms", icon: "MessagesSquare", active: true, badge: openCount || null },
+    { id: "pacientes", label: "Pacientes", icon: "UsersRound" },
+  ];
+  return (
+    <header className="sticky z-30 border-b border-fg/[0.08] bg-bg/80 backdrop-blur-xl" style={{ top: "env(safe-area-inset-top, 0px)" }}>
+      <div className="mx-auto flex h-14 max-w-[1680px] items-center gap-3 px-4 sm:px-6">
+        <div className="flex items-center gap-2">
+          <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-fg text-bg">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 12h4l2-5 4 10 2-5h6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight">ClinicFlow</span>
+          <span className="hidden text-[13px] text-faint lg:inline">/ {CLINIC}</span>
+        </div>
+        <nav className="ml-3 hidden items-center gap-0.5 md:flex" aria-label="Principal">
+          {nav.map((n) => (
+            <button key={n.id} type="button" onClick={() => !n.active && onNavigate(n.label)} aria-current={n.active ? "page" : undefined}
+              className={cx("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+                n.active ? "bg-sunken text-fg" : "text-muted hover:bg-sunken/70 hover:text-fg")}>
+              <Icon n={n.icon} size={14} />{n.label}
+              {n.badge && <span className="ml-0.5 rounded-full bg-ai/10 px-1.5 font-mono text-[11px] text-ai tnum">{n.badge}</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="flex-1" />
+        <button type="button" onClick={onOpenPalette}
+          className="inline-flex h-8 min-w-0 items-center gap-2 rounded-lg border border-fg/[0.08] bg-surface pl-2.5 pr-1.5 text-[13px] text-muted shadow-[0_1px_2px_rgb(var(--fg)/0.04)] transition-colors hover:border-fg/[0.16] hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 sm:w-64">
+          <Icon n="Search" size={14} />
+          <span className="hidden flex-1 truncate text-left sm:inline">Buscar conversa ou ação</span>
+          <span className="hidden items-center gap-0.5 sm:inline-flex"><Kbd>Ctrl</Kbd><Kbd>K</Kbd></span>
+        </button>
+        <ThemeToggle />
+        <span className="hidden items-center gap-2 border-l border-fg/[0.08] pl-3 sm:inline-flex">
+          <Avatar name="Carla Mendes" size={28} />
+          <span className="hidden flex-col leading-tight xl:flex"><span className="text-[13px] font-medium">Carla Mendes</span><span className="text-[11px] text-faint">Recepção · balcão 1</span></span>
+        </span>
+      </div>
+
+      <div className="mx-auto flex max-w-[1680px] flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-3 sm:px-6">
+        <span className="inline-flex items-center rounded-lg border border-fg/[0.08] bg-surface p-0.5 text-[13px] font-medium" role="group" aria-label="Dia das conversas">
+          <button type="button" onClick={() => onNavigate("A Agenda de hoje")} className="inline-flex h-7 items-center rounded-md px-2.5 text-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">Hoje</button>
+          <span aria-current="true" className="inline-flex h-7 items-center rounded-md bg-sunken px-2.5 text-fg">Amanhã · <span className="ml-1 font-mono tnum">{TOMORROW}</span></span>
+        </span>
+        <span className="hidden text-[13px] text-muted first-letter:uppercase sm:inline">{label}</span>
+        <span className="inline-flex items-center gap-2 font-mono text-[13px] text-muted tnum" aria-live="off">
+          <Pulse tone="ok" />ao vivo · {hms(now)}
+        </span>
+        <span className="inline-flex items-center gap-2 rounded-lg border border-ai/20 bg-ai/[0.06] px-2.5 py-1 text-[13px]">
+          <Icon n="Sparkles" size={15} className="text-ai" />
+          <span className="text-faint">Copilot</span>
+          <span className="font-medium text-ai">ativo</span>
+          <span className="hidden text-muted md:inline">· <span className="font-mono tnum">{autonomy}%</span> resolvido sem humano</span>
+        </span>
+      </div>
+    </header>
+  );
+}
+
+/* ───────────────────────── KPIs + filtros ───────────────────────── */
+function Kpi({ icon, label, value, sub, tone, flashKey }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5 bg-surface p-4 sm:p-5">
+      <div className="flex items-center gap-2 text-[12px] font-medium text-muted"><Icon n={icon} size={14} />{label}</div>
+      <div key={flashKey} className={cx("-mx-1 self-start rounded-md px-1 font-mono text-[30px] font-medium leading-none tracking-tight tnum", flashKey ? "anim-flash" : "", tone ? TEXT[tone] : "")}>{value}</div>
+      <div className="text-[12px] leading-snug text-muted">{sub}</div>
+    </div>
+  );
+}
+
+function Kpis({ counts, revenue, base }) {
+  return (
+    <section aria-label="Resgate de receita de amanhã" className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-fg/[0.08] bg-fg/[0.08] shadow-[0_1px_2px_rgb(var(--fg)/0.04)] sm:grid-cols-3 lg:grid-cols-5">
+      <Kpi icon="MessagesSquare" label="Conversas de amanhã" value={counts.total} sub={<>{TOMORROW} · todas pelo WhatsApp</>} />
+      <Kpi icon="CalendarCheck" label="Confirmadas" value={counts.confirmado} tone="ok" sub={<><span className="font-mono tnum">{Math.round((counts.confirmado / counts.total) * 100)}%</span> da agenda, sem ligação</>} />
+      <Kpi icon="Sparkles" label="Reagendadas pela IA" value={counts.reagendado} tone="ai" flashKey={counts.reagendado > base.reagendado ? counts.reagendado : 0} sub="vagas trocadas, nenhuma cadeira vazia" />
+      <Kpi icon="Clock" label="Aguardando resposta" value={counts.aguardando + counts.humano} tone={counts.humano ? "warn" : undefined} sub={counts.humano ? <><span className="font-mono tnum">{counts.humano}</span> precisa de humano</> : "nenhuma escalação aberta"} />
+      <Kpi icon="Wallet" label="Receita protegida" value={brl(revenue)} tone="ok" flashKey={revenue > base.revenue ? revenue : 0} sub="confirmadas e remarcadas, por ticket" />
+    </section>
+  );
+}
+
+function FilterBar({ filter, setFilter, counts }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar conversas">
+      {FILTERS.map((f) => {
+        const active = f.id === filter;
+        const n = f.id === "all" ? counts.total : counts[f.id];
+        return (
+          <button key={f.id} type="button" onClick={() => setFilter(f.id)} aria-pressed={active}
+            className={cx("inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+              active ? "border-fg/90 bg-fg text-bg" : "border-fg/[0.1] bg-surface text-fg/80 hover:bg-sunken")}>
+            <Kbd className={active ? "border-bg/20 bg-bg/10 text-bg/80 shadow-none" : ""}>{f.k}</Kbd>
+            {f.label}
+            <span className={cx("font-mono text-[11px] tnum", active ? "text-bg/70" : "text-faint")}>{n}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ───────────────────────── lista de conversas ───────────────────────── */
+function ConvRow({ c, now, selected, onSelect, onOpen }) {
+  const s = STATES[c.state];
+  return (
+    <li data-cid={c.id} tabIndex={0} aria-current={selected ? "true" : undefined}
+      aria-label={`${c.name}, ${hm(c.time)}, ${DOCS[c.doc].name}, ${c.human ? "humano no controle" : s.label}`}
+      onClick={() => onSelect(c.id)} onFocus={() => onSelect(c.id)} onDoubleClick={() => onOpen(c.id)}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onOpen(c.id); } }}
+      className={cx("group relative flex cursor-default gap-2.5 rounded-xl border p-2.5 outline-none transition-[box-shadow,border-color,background-color] duration-150",
+        selected ? "border-ai/50 bg-surface ring-[3px] ring-ai/15" : "border-transparent hover:border-fg/[0.1] hover:bg-surface focus-visible:border-ai/50 focus-visible:ring-[3px] focus-visible:ring-ai/15")}>
+      <Avatar name={c.name} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-[14px] font-medium leading-tight">{c.name}</span>
+          <span className="shrink-0 font-mono text-[11px] text-faint tnum">{ago(now, c.lastAt)}</span>
+        </div>
+        <div className="flex min-w-0 items-center gap-2 text-[12px] text-muted">
+          <span className="font-mono tnum">{hm(c.time)}</span>
+          <DocTag id={c.doc} />
+          {c.to && <span className="truncate font-mono text-ai tnum">→ {c.to}</span>}
+        </div>
+        <div className="flex min-w-0 items-center gap-1.5">
+          {c.typing
+            ? <span className="inline-flex items-center gap-1 text-[12px] text-ai"><Dots /> {c.typing === "in" ? "digitando" : "Copilot escrevendo"}</span>
+            : <span className="min-w-0 flex-1 truncate text-[12px] text-faint">{c.preview}</span>}
+        </div>
+        <StateChip state={c.state} human={c.human} />
+      </div>
+    </li>
+  );
+}
+
+function Dots() {
+  return (
+    <span className="inline-flex items-center gap-[3px]" aria-hidden="true">
+      {[0, 1, 2].map((i) => <span key={i} className="anim-dot h-1.5 w-1.5 rounded-full bg-current" style={{ animationDelay: `${i * 0.15}s` }} />)}
+    </span>
+  );
+}
+
+function ConvList({ list, now, selectedId, onSelect, onOpen, filter, hidden }) {
+  return (
+    <section aria-label="Conversas de amanhã" className={cx("flex min-w-0 flex-col rounded-2xl border border-fg/[0.06] bg-sunken/60 md:h-[calc(100dvh-262px)] md:min-h-[520px]", hidden ? "hidden md:flex" : "flex")}>
+      <header className="flex items-center gap-2 px-3 pb-2 pt-3">
+        <Icon n="MessageCircle" size={15} className="text-muted" />
+        <h2 className="text-[13px] font-semibold">Conversas</h2>
+        <span className="text-[12px] text-faint">{FILTERS.find((f) => f.id === filter).label.toLowerCase()}</span>
+        <span className="ml-auto font-mono text-[12px] text-muted tnum">{list.length}</span>
+      </header>
+      <ul className="flex max-h-[70dvh] flex-1 flex-col gap-1 overflow-y-auto px-1.5 pb-2 md:max-h-none" role="list">
+        {list.length === 0 && (
+          <li className="m-1 flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-fg/[0.1] px-3 py-8 text-center text-[12px] text-faint">
+            <Icon n="CheckCheck" size={18} className="text-ok" />
+            <span>Ninguém sem resposta. O Copilot está em dia.</span>
+          </li>
+        )}
+        {list.map((c) => <ConvRow key={c.id} c={c} now={now} selected={selectedId === c.id} onSelect={onSelect} onOpen={onOpen} />)}
+      </ul>
+    </section>
+  );
+}
+
+/* ───────────────────────── linha do tempo ───────────────────────── */
+function SysRow({ m }) {
+  return (
+    <li className="anim-enter flex items-start gap-2.5 py-1 pl-1 text-[12px] text-muted">
+      <span className={cx("mt-px inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-fg/[0.08] bg-surface", TEXT[m.tone])}><Icon n={m.icon} size={11} sw={2} /></span>
+      <span className="min-w-0 flex-1 leading-snug">{m.text}</span>
+      <span className="shrink-0 font-mono text-[11px] text-faint tnum">{hm(m.t)}</span>
+    </li>
+  );
+}
+
+function Bubble({ m, name }) {
+  const mine = m.k !== "in";
+  const human = m.k === "human";
+  return (
+    <li className={cx("anim-enter flex items-end gap-2", mine ? "justify-end" : "justify-start")}>
+      {!mine && <Avatar name={name} size={24} />}
+      <div className={cx("flex max-w-[82%] flex-col gap-1", mine ? "items-end" : "items-start")}>
+        <span className={cx("inline-flex items-center gap-1 px-1 text-[11px] font-medium", human ? "text-fg" : mine ? "text-ai" : "text-muted")}>
+          {!mine ? first(name) : human ? <><Icon n="UserRound" size={11} sw={2} />Carla · recepção</> : <><Icon n="Sparkles" size={11} sw={2} />Copilot</>}
+        </span>
+        <div className={cx("rounded-2xl border px-3 py-2 text-[13px] leading-snug",
+          human ? "rounded-br-md border-fg/90 bg-fg text-bg"
+            : mine ? "rounded-br-md border-ok/15 bg-ok/[0.1] text-fg"
+              : "rounded-bl-md border-fg/[0.08] bg-surface text-fg")}>
+          {m.text}
+        </div>
+        {m.reasoning && (
+          <details className="group/r max-w-full rounded-lg border border-ai/20 bg-ai/[0.06] text-[12px] text-fg/85">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1 text-ai focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 [&::-webkit-details-marker]:hidden">
+              <Icon n="Sparkles" size={12} sw={2} /><span className="font-medium">Como a IA decidiu</span>
+              <Icon n="ChevronDown" size={12} className="ml-auto transition-transform group-open/r:rotate-180" />
+            </summary>
+            <p className="border-t border-ai/15 px-2 py-1.5 leading-snug">{m.reasoning}</p>
+          </details>
+        )}
+        <span className="px-1 font-mono text-[11px] text-faint tnum">{hm(m.t)}</span>
+      </div>
+    </li>
+  );
+}
+
+function TypingRow({ who, name }) {
+  const mine = who === "out";
+  return (
+    <li className={cx("flex items-end gap-2", mine ? "justify-end" : "justify-start")} aria-label={mine ? "Copilot escrevendo" : `${first(name)} digitando`}>
+      {!mine && <Avatar name={name} size={24} />}
+      <div className={cx("inline-flex h-8 items-center rounded-2xl border px-3", mine ? "rounded-br-md border-ok/15 bg-ok/[0.1] text-ai" : "rounded-bl-md border-fg/[0.08] bg-surface text-muted")}><Dots /></div>
+    </li>
+  );
+}
+
+function Thread({ c, now, onBack, onTakeover, onRelease, onSend, hidden }) {
+  const [draft, setDraft] = useState("");
+  const listRef = useRef(null);
+  const inputRef = useRef(null);
+  useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [c && c.msgs.length, c && c.typing, c && c.id]);
+  useEffect(() => { if (c && c.human && inputRef.current) inputRef.current.focus(); }, [c && c.human, c && c.id]);
+  useEffect(() => setDraft(""), [c && c.id]);
+
+  if (!c) {
+    return (
+      <section aria-label="Conversa" className={cx("min-w-0 items-center justify-center rounded-2xl border border-fg/[0.08] bg-surface p-8 text-center text-[13px] text-muted md:h-[calc(100dvh-262px)] md:min-h-[520px]", hidden ? "hidden md:flex" : "flex")}>
+        Selecione uma conversa para ver a linha do tempo do Copilot.
+      </section>
+    );
+  }
+  const submit = (e) => { e.preventDefault(); const t = draft.trim(); if (!t) return; onSend(c.id, t); setDraft(""); };
+  const dayLabel = c.day === "hoje" ? "hoje · sexta-feira, 9 de outubro" : "consulta de amanhã · sábado, 10 de outubro";
+
+  return (
+    <section aria-label={`Conversa com ${c.name}`} className={cx("min-w-0 flex-col overflow-hidden rounded-2xl border border-fg/[0.08] bg-surface shadow-[0_1px_2px_rgb(var(--fg)/0.04)] md:h-[calc(100dvh-262px)] md:min-h-[520px]", hidden ? "hidden md:flex" : "flex")}>
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-fg/[0.08] px-3 py-2.5 sm:px-4">
+        <button type="button" onClick={onBack} aria-label="Voltar para a lista" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-fg/[0.08] text-muted hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 md:hidden"><Icon n="ArrowLeft" size={15} /></button>
+        <Avatar name={c.name} size={36} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="truncate text-[15px] font-semibold leading-tight">{c.name}</h2>
+            <StateChip state={c.state} human={c.human} />
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-muted">
+            <span className="font-mono tnum">{c.day === "hoje" ? "hoje" : TOMORROW} · {hm(c.time)}</span>
+            {c.to && <span className="font-mono text-ai tnum">→ {c.to}</span>}
+            <DocTag id={c.doc} />
+            <Payer payer={c.payer} />
+            <span className="truncate text-faint">{c.type}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {c.human
+            ? <Btn onClick={() => onRelease(c.id)}><Icon n="Sparkles" size={13} />Devolver ao Copilot<Kbd>Esc</Kbd></Btn>
+            : <Btn primary onClick={() => onTakeover(c.id)}><Icon n="Hand" size={13} />Assumir conversa<Kbd className="border-bg/20 bg-bg/10 text-bg/80 shadow-none">T</Kbd></Btn>}
+        </div>
+      </header>
+
+      <ol ref={listRef} className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-3 sm:px-4" aria-live="polite" aria-relevant="additions" aria-label="Linha do tempo da conversa">
+        <li className="mb-1 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.06em] text-faint"><span className="h-px flex-1 bg-fg/[0.06]" />{dayLabel}<span className="h-px flex-1 bg-fg/[0.06]" /></li>
+        {c.msgs.map((m, i) => m.k === "sys" ? <SysRow key={i} m={m} /> : <Bubble key={i} m={m} name={c.name} />)}
+        {c.typing && <TypingRow who={c.typing} name={c.name} />}
+        {c.human && <li className="mt-1 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.06em] text-faint"><span className="h-px flex-1 bg-fg/[0.06]" />Copilot pausado · você responde<span className="h-px flex-1 bg-fg/[0.06]" /></li>}
+      </ol>
+
+      <form onSubmit={submit} className="border-t border-fg/[0.08] p-2.5 sm:p-3">
+        <div className={cx("flex items-center gap-2 rounded-xl border px-2 transition-colors", c.human ? "border-fg/[0.14] bg-surface focus-within:border-ai/50 focus-within:ring-[3px] focus-within:ring-ai/15" : "border-fg/[0.08] bg-sunken")}>
+          <Icon n={c.human ? "UserRound" : "Sparkles"} size={15} className={c.human ? "text-fg" : "text-ai"} />
+          <input ref={inputRef} value={draft} onChange={(e) => setDraft(e.target.value)} disabled={!c.human} aria-label="Mensagem"
+            placeholder={c.human ? `Mensagem para ${first(c.name)}…` : "O Copilot responde sozinho. Assuma a conversa para escrever."}
+            className="h-10 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint disabled:cursor-not-allowed" />
+          <button type="submit" disabled={!c.human || !draft.trim()} aria-label="Enviar"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-fg text-bg transition-colors hover:bg-fg/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 disabled:opacity-30"><Icon n="Send" size={14} /></button>
+        </div>
+        <p className="mt-1.5 flex items-center gap-1.5 px-1 text-[12px] text-faint">
+          {c.human ? <><Kbd>↵</Kbd> envia · <Kbd>Esc</Kbd> devolve ao Copilot</> : <><Kbd>T</Kbd> assume a conversa · o paciente não percebe a troca</>}
+        </p>
+      </form>
+    </section>
+  );
+}
+
+/* ───────────────────────── fila de espera ───────────────────────── */
+function SmartFillRun({ sf, now, onOpenConv }) {
+  const elapsed = (sf.filledAt || now) - sf.openedAt;
+  const done = sf.status === "filled";
+  const CAND = { lido: ["Lida", "muted"], digitando: ["Respondendo…", "ai"], aceitou: ["Aceitou 15:30", "ok"], enviado: ["Enviada", "muted"], fila: ["Na fila", "muted"], cancelado: ["Dispensada", "muted"] };
+  return (
+    <section aria-label="Smart Fill em andamento" className={cx("relative shrink-0 overflow-hidden rounded-2xl border bg-surface p-3.5 transition-shadow duration-700",
+      done ? "border-ok/30 shadow-[0_24px_60px_-28px_rgb(var(--ok)/0.55)]" : "border-ai/25 shadow-[0_24px_60px_-28px_rgb(var(--ai)/0.55)]")}>
+      <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full blur-3xl" style={{ background: done ? "rgb(var(--ok) / .14)" : "rgb(var(--ai) / .16)" }} />
+      <div className="relative flex items-center gap-2">
+        <span className={cx("inline-flex h-6 w-6 items-center justify-center rounded-md", done ? "bg-ok/10 text-ok" : "bg-ai/10 text-ai")}><Icon n="Zap" size={14} sw={2} /></span>
+        <h3 className="text-[13px] font-semibold">Smart Fill · <span className="font-mono tnum">{sf.slot}</span></h3>
+        <span className={cx("ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium", done ? "text-ok" : "text-ai")}>{!done && <Pulse tone="ai" />}{done ? "Vaga reposta" : "Em andamento"}</span>
+      </div>
+      <p className="relative mt-1.5 text-[12px] text-muted"><DocTag id={sf.doc} /> · {sf.cancelledBy} desmarcou às <span className="font-mono tnum">{hm(sf.openedAt)}</span></p>
+      <div className="relative mt-2.5 flex items-baseline justify-between">
+        <span className={cx("font-mono text-[22px] font-medium leading-none tracking-tight tnum", done ? "text-ok" : "")}>{mmss(elapsed)}</span>
+        <span className="font-mono text-[12px] text-muted tnum">meta 08:00</span>
+      </div>
+      <div className="relative mt-2"><Meter value={elapsed / 480} tone={done ? "ok" : "ai"} /></div>
+      <ol className="relative mt-3 flex flex-col">
+        {sf.events.map((e, i) => (
+          <li key={i} className={cx("relative flex gap-2.5 pb-2 last:pb-0", i === sf.events.length - 1 ? "anim-enter" : "")}>
+            {i < sf.events.length - 1 && <span className="absolute left-[9px] top-5 h-[calc(100%-14px)] w-px bg-fg/[0.08]" />}
+            <span className={cx("relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-fg/[0.08] bg-surface", TEXT[e.tone])}><Icon n={e.icon} size={11} sw={2} /></span>
+            <span className="min-w-0 flex-1 text-[12px] leading-snug text-fg/85">{e.text}</span>
+            <span className="shrink-0 font-mono text-[11px] text-faint tnum">{hm(e.t)}</span>
+          </li>
+        ))}
+      </ol>
+      <ol className="relative mt-2 flex flex-col divide-y divide-fg/[0.06] border-t border-fg/[0.06]">
+        {sf.candidates.map((c, i) => { const [lab, tone] = CAND[c.status]; return (
+          <li key={c.name} className="flex items-center gap-2 py-1.5">
+            <span className="w-3 font-mono text-[11px] text-faint tnum">{i + 1}</span>
+            <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{c.name}</span>
+            <span className={cx("shrink-0 inline-flex items-center gap-1 text-[12px] font-medium", TEXT[tone])}>{c.status === "digitando" && <Dots />}{lab}</span>
+          </li>); })}
+      </ol>
+      <button type="button" onClick={() => onOpenConv("eduardo")} className="relative mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-fg/[0.1] text-[12px] font-medium text-fg/80 hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">
+        Ver conversa com Eduardo <Icon n="ArrowUpRight" size={13} />
+      </button>
+    </section>
+  );
+}
+
+function WaitEntry({ w, pos, total, onOffer, onMove }) {
+  const tone = w.score >= 0.8 ? "bad" : w.score >= 0.5 ? "warn" : "muted";
+  return (
+    <li data-wid={w.id} tabIndex={0} aria-label={`${w.name}, ${w.proc}, ${DOCS[w.doc].short}, posição ${pos} de ${total}, esperando há ${w.since} dias`}
+      onKeyDown={(e) => {
+        if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) { e.preventDefault(); onMove(w.id, e.key === "ArrowUp" ? -1 : 1); }
+        else if (e.key.toLowerCase() === "o" && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); onOffer(w.id); }
+      }}
+      className="group flex flex-col gap-2 rounded-xl border border-fg/[0.08] bg-surface p-2.5 outline-none transition-[box-shadow,border-color] duration-150 hover:border-fg/[0.14] focus-visible:border-ai/50 focus-visible:ring-[3px] focus-visible:ring-ai/15">
+      <div className="flex items-start gap-2">
+        <Avatar name={w.name} size={28} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-[13px] font-medium leading-tight">{w.name}</span>
+            <span className="shrink-0 font-mono text-[11px] text-faint tnum">{w.since} {w.since === 1 ? "dia" : "dias"}</span>
+          </div>
+          <span className="truncate text-[12px] text-muted">{w.proc}</span>
+          <div className="flex min-w-0 items-center gap-2 text-[12px] text-muted"><DocTag id={w.doc} /><span className="truncate">· {w.period}</span></div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="flex-1"><Meter value={w.score} tone={tone} /></div>
+        <span className="font-mono text-[11px] text-muted tnum" aria-label={`Prioridade ${Math.round(w.score * 100)} de 100`}>{Math.round(w.score * 100)}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Chip tone="muted">{w.payer.kind === "part" ? `Particular · ${brl(w.payer.value)}` : w.payer.label}</Chip>
+        {w.fit && <Chip tone="ok" icon="Zap">aceita encaixe</Chip>}
+        {w.offeredAt && <Chip tone="ai" icon="Send">oferta enviada {hm(w.offeredAt)}</Chip>}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => onOffer(w.id)} disabled={!!w.offeredAt}
+          className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-fg/[0.1] bg-surface px-2 text-[12px] font-medium text-fg/80 transition-colors hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 disabled:opacity-50">
+          <Kbd>O</Kbd>{w.offeredAt ? "Oferta enviada" : "Oferecer próxima vaga"}
+        </button>
+        <span className="ml-auto inline-flex gap-0.5">
+          <button type="button" aria-label="Subir na fila" disabled={pos === 1} onClick={() => onMove(w.id, -1)} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 disabled:opacity-30"><Icon n="ChevronUp" size={14} /></button>
+          <button type="button" aria-label="Descer na fila" disabled={pos === total} onClick={() => onMove(w.id, 1)} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 disabled:opacity-30"><Icon n="ChevronDown" size={14} /></button>
+        </span>
+      </div>
+    </li>
+  );
+}
+
+function Waitlist({ waitlist, sf, now, onOffer, onMove, onOpenConv, hidden }) {
+  return (
+    <aside aria-label="Fila de espera dinâmica" className={cx("min-w-0 flex-col gap-3 rounded-2xl border border-fg/[0.06] bg-sunken/60 p-2 md:col-span-2 xl:col-span-1 xl:h-[calc(100dvh-262px)] xl:min-h-[520px] xl:overflow-y-auto", hidden ? "hidden md:flex" : "flex")}>
+      <header className="flex shrink-0 flex-wrap items-center gap-2 px-1.5 pt-1.5">
+        <Icon n="ListOrdered" size={15} className="text-muted" />
+        <h2 className="text-[13px] font-semibold">Fila de espera dinâmica</h2>
+        <span className="ml-auto font-mono text-[12px] text-muted tnum">{waitlist.length}</span>
+        <span className="hidden items-center gap-1 text-[12px] text-faint sm:inline-flex"><Kbd>Alt</Kbd><Kbd>↑</Kbd><Kbd>↓</Kbd> reordena</span>
+      </header>
+      <SmartFillRun sf={sf} now={now} onOpenConv={onOpenConv} />
+      <div className="grid shrink-0 gap-3 md:grid-cols-3 xl:grid-cols-1">
+        {URGENCY.map((u) => {
+          const group = waitlist.filter((w) => w.urgency === u.id);
+          return (
+            <section key={u.id} aria-labelledby={`urg-${u.id}`} className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 px-1.5">
+                <span className={cx("h-2 w-2 shrink-0 rounded-full", DOT[u.tone])} />
+                <h3 id={`urg-${u.id}`} className="text-[12px] font-semibold">{u.label}</h3>
+                <span className="truncate text-[12px] text-faint">{u.sub}</span>
+                <span className="ml-auto font-mono text-[12px] text-muted tnum">{group.length}</span>
+              </div>
+              <ul className="flex flex-col gap-1.5" role="list">
+                {group.length === 0 && <li className="rounded-xl border border-dashed border-fg/[0.1] px-3 py-4 text-center text-[12px] text-faint">Fila vazia</li>}
+                {group.map((w, i) => <WaitEntry key={w.id} w={w} pos={i + 1} total={group.length} onOffer={onOffer} onMove={onMove} />)}
+              </ul>
+            </section>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
+
+/* ───────────────────────── overlays ───────────────────────── */
+function Overlay({ onClose, children, label, align = "top" }) {
+  return (
+    <div role="dialog" aria-modal="true" aria-label={label} className={cx("fixed inset-0 z-50 flex justify-center bg-black/40 px-4 backdrop-blur-[2px]", align === "top" ? "items-start pt-[12vh]" : "items-center")} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="anim-pop w-full max-w-[560px] overflow-hidden rounded-2xl border border-fg/[0.1] bg-surface shadow-[0_32px_80px_-20px_rgb(0_0_0/0.35)]">{children}</div>
+    </div>
+  );
+}
+
+function CommandPalette({ items, onClose }) {
+  const [q, setQ] = useState("");
+  const [idx, setIdx] = useState(0);
+  const listRef = useRef(null);
+  const filtered = useMemo(() => {
+    const n = norm(q.trim());
+    return n ? items.filter((it) => norm(it.label + " " + (it.hint || "") + " " + it.group).includes(n)) : items;
+  }, [q, items]);
+  useEffect(() => setIdx(0), [q]);
+  useEffect(() => { const el = listRef.current && listRef.current.querySelector(`[data-i="${idx}"]`); el && el.scrollIntoView({ block: "nearest" }); }, [idx]);
+  const run = (it) => { onClose(); it && it.run(); };
+  const onKey = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, filtered.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); run(filtered[idx]); }
+    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+  };
+  let lastGroup = null;
+  return (
+    <Overlay onClose={onClose} label="Busca rápida">
+      <div className="flex items-center gap-2.5 border-b border-fg/[0.08] px-4">
+        <Icon n="Search" size={16} className="text-muted" />
+        <input id="cmdk-input" autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="Paciente, profissional ou ação…" aria-label="Buscar"
+          className="h-12 flex-1 bg-transparent text-[15px] outline-none placeholder:text-faint" />
+        <Kbd>Esc</Kbd>
+      </div>
+      <ul ref={listRef} className="max-h-[52vh] overflow-y-auto p-1.5" role="listbox" aria-label="Resultados">
+        {filtered.length === 0 && <li className="px-3 py-8 text-center text-[13px] text-muted">Nada encontrado para “{q}”.</li>}
+        {filtered.map((it, i) => {
+          const head = it.group !== lastGroup ? (lastGroup = it.group) : null;
+          return (
+            <React.Fragment key={it.id}>
+              {head && <li className="px-2.5 pb-1 pt-2.5 text-[11px] font-medium uppercase tracking-[0.06em] text-faint" role="presentation">{head}</li>}
+              <li data-i={i} role="option" aria-selected={i === idx} onMouseMove={() => setIdx(i)} onClick={() => run(it)}
+                className={cx("flex cursor-default items-center gap-3 rounded-lg px-2.5 py-2", i === idx ? "bg-sunken" : "")}>
+                <span className={cx("inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-fg/[0.08]", it.tone ? TEXT[it.tone] : "text-muted")}><Icon n={it.icon} size={14} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-medium">{it.label}</span>
+                  {it.hint && <span className="block truncate text-[12px] text-muted">{it.hint}</span>}
+                </span>
+                {it.kbd && <span className="flex gap-0.5">{it.kbd.map((k) => <Kbd key={k}>{k}</Kbd>)}</span>}
+                {i === idx && <Icon n="CornerDownLeft" size={14} className="text-faint" />}
+              </li>
+            </React.Fragment>
+          );
+        })}
+      </ul>
+      <div className="flex items-center gap-4 border-t border-fg/[0.08] px-4 py-2 text-[12px] text-faint">
+        <span className="inline-flex items-center gap-1"><Kbd>↑</Kbd><Kbd>↓</Kbd> navegar</span>
+        <span className="inline-flex items-center gap-1"><Kbd>↵</Kbd> abrir</span>
+        <span className="ml-auto">{filtered.length} resultados</span>
+      </div>
+    </Overlay>
+  );
+}
+
+const SHORTCUTS = [
+  ["Navegar entre conversas", ["J", "K", "↑", "↓"]],
+  ["Abrir conversa (telefone)", ["↵"]],
+  ["Assumir conversa", ["T"]],
+  ["Devolver ao Copilot / voltar", ["Esc"]],
+  ["Filtros: todas · humano · reagendadas · confirmadas · sem resposta", ["1", "2", "3", "4", "5"]],
+  ["Oferecer próxima vaga (na fila, item focado)", ["O"]],
+  ["Reordenar a fila de espera", ["Alt", "↑", "↓"]],
+  ["Desfazer última ação", ["Z"]],
+  ["Busca rápida", ["Ctrl", "K"]],
+  ["Esta lista", ["?"]],
+];
+
+function ShortcutsDialog({ onClose }) {
+  const ref = useRef(null);
+  useEffect(() => { ref.current && ref.current.focus(); }, []);
+  return (
+    <Overlay onClose={onClose} label="Atalhos de teclado" align="center">
+      <div ref={ref} tabIndex={-1} onKeyDown={(e) => (e.key === "Escape" || e.key === "?") && onClose()} className="outline-none">
+        <div className="flex items-center gap-2 border-b border-fg/[0.08] p-4"><Icon n="Keyboard" size={16} className="text-muted" /><h2 className="text-[15px] font-semibold">Atalhos do Centro de Resgate</h2><span className="ml-auto"><Kbd>Esc</Kbd></span></div>
+        <ul className="divide-y divide-fg/[0.06] px-4 py-1">
+          {SHORTCUTS.map(([label, keys]) => (
+            <li key={label} className="flex items-center justify-between gap-4 py-2.5 text-[13px]"><span>{label}</span><span className="flex shrink-0 gap-1">{keys.map((k) => <Kbd key={k}>{k}</Kbd>)}</span></li>
+          ))}
+        </ul>
+      </div>
+    </Overlay>
+  );
+}
+
+function Toast({ toast, onUndo, onClose }) {
+  if (!toast) return null;
+  return (
+    <div className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4" style={{ bottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}>
+      <div key={toast.id} role="status" className="anim-pop pointer-events-auto flex max-w-[560px] items-center gap-3 rounded-xl border border-fg/[0.1] bg-fg py-2 pl-3 pr-2 text-[13px] text-bg shadow-[0_20px_50px_-20px_rgb(0_0_0/0.5)]">
+        <Icon n={toast.icon || "Check"} size={15} className={toast.tone === "ai" ? "text-[rgb(var(--ai))]" : "text-[rgb(var(--ok))]"} />
+        <span className="min-w-0 flex-1">{toast.msg}</span>
+        {toast.undo && (
+          <button type="button" onClick={onUndo} className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 font-medium text-bg/80 hover:bg-bg/10">
+            Desfazer <Kbd className="border-bg/20 bg-bg/10 text-bg/80 shadow-none">Z</Kbd>
+          </button>
+        )}
+        <button type="button" onClick={onClose} aria-label="Fechar aviso" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-bg/60 hover:bg-bg/10"><Icon n="X" size={14} /></button>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── roteiro ao vivo (Paula + Smart Fill) ───────────────────────── */
+const PAULA_OFFER = "Claro, Paula! Tenho dois horários de manhã com a Dra. Helena: sábado 10/10 às 09:00 ou segunda 12/10 às 08:30. Qual prefere?";
+const PAULA_REASON = "Considerou: preferência por manhã (pedido na mensagem), convênio Unimed com grade liberada, Dra. Helena tem 2 vagas livres em 7 dias, sem retorno pendente que exija a mesma semana.";
+
+// Cada passo recebe (patchConv, ctx) e roda uma única vez quando now >= START + at.
+const LIVE_STEPS = [
+  { at: 3, run: (p) => p("paula", (c) => ({ ...c, typing: "in" })) },
+  { at: 6, run: (p, { t }) => p("paula", (c) => ({ ...c, typing: null, lastAt: t, preview: "Oi, de tarde não vou conseguir. Tem algo de manhã?", msgs: [...c.msgs, inn(t, "Oi, de tarde não vou conseguir. Tem algo de manhã?"), sys(t, "MessageCircle", "ai", "Intenção detectada: remarcar · preferência: manhã")] })) },
+  { at: 8, run: (p) => p("paula", (c) => ({ ...c, typing: "out" })) },
+  { at: 10, run: (p, { t }) => p("paula", (c) => ({ ...c, typing: null, lastAt: t, preview: PAULA_OFFER, msgs: [...c.msgs, out(t, PAULA_OFFER, PAULA_REASON)] })) },
+  { at: 14, run: (p, { setSf }) => { p("paula", (c) => ({ ...c, typing: "in" })); setSf((s) => ({ ...s, candidates: s.candidates.map((c, i) => (i === 0 ? { ...c, status: "digitando" } : c)) })); } },
+  { at: 17, run: (p, { t }) => p("paula", (c) => ({ ...c, typing: null, lastAt: t, preview: "Sábado 9h, perfeito", msgs: [...c.msgs, inn(t, "Sábado 9h, perfeito")] })) },
+  { at: 19, run: (p, { t, toast }) => {
+      p("paula", (c) => ({ ...c, state: "reagendado", to: "sáb 10/10 · 09:00", lastAt: t, preview: "Pronto, Paula! Remarcado para sábado 10/10 às 09:00…", msgs: [...c.msgs,
+        sys(t, "CalendarCheck", "ok", "Consulta remarcada: 14:30 → 09:00 · sáb 10/10"),
+        sys(t, "Database", "ai", "Agenda atualizada · vaga 14:30 liberada para o Smart Fill · zero intervenção humana"),
+        out(t + 1, "Pronto, Paula! Remarcado para sábado 10/10 às 09:00 com a Dra. Helena. Até amanhã!")] }));
+      toast("Agenda atualizada · Paula Siqueira remarcada pela IA 14:30 → 09:00, sem ninguém da recepção", { icon: "Sparkles", tone: "ai" });
+    } },
+  { at: 28, run: (p, { t, setSf, setWaitlist, toast }) => {
+      setSf((s) => ({ ...s, status: "filled", filledAt: t, candidates: s.candidates.map((c, i) => ({ ...c, status: i === 0 ? "aceitou" : "cancelado" })), events: [...s.events, { t, icon: "CalendarCheck", tone: "ok", text: "Eduardo aceitou · vaga 15:30 reposta" }, { t, icon: "Database", tone: "ai", text: "Agenda atualizada · Lívia dispensada com aviso" }] }));
+      p("eduardo", (c) => ({ ...c, state: "confirmado", lastAt: t, preview: "SIM, posso sim!", msgs: [...c.msgs, inn(t - 1, "SIM, posso sim!"), sys(t, "CalendarCheck", "ok", "Vaga 15:30 reposta · agenda atualizada"), out(t + 1, "Fechado, Eduardo! Hoje às 15:30 com a Dra. Okada, Sala 3. Chegue 10 min antes.")] }));
+      setWaitlist((w) => w.map((x) => (x.id === "w3" ? { ...x, offeredAt: null } : x)));
+      toast(`Vaga das 15:30 reposta em ${mmss(t - SF_INITIAL.openedAt)} · Eduardo Brandão confirmou pelo WhatsApp`, { icon: "Zap", tone: "ok" });
+    } },
+];
+
+/* ───────────────────────── app ───────────────────────── */
+function App() {
+  const [now, setNow] = useState(START);
+  const [convs, setConvs] = useState(() => [...INITIAL_CONVS, EDUARDO]);
+  const [waitlist, setWaitlist] = useState(WAIT_INITIAL);
+  const [sf, setSf] = useState(SF_INITIAL);
+  const [filter, setFilter] = useState("all");
+  const [selectedId, setSelectedId] = useState("paula");
+  const [view, setView] = useState("list"); // telefone: list | thread
+  const [palette, setPalette] = useState(false);
+  const [help, setHelp] = useState(false);
+  const [toast, setToast] = useState(null);
+  const stepRef = useRef(0);
+
+  useEffect(() => { const t = setInterval(() => setNow((n) => n + 1), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 6000); return () => clearTimeout(t); }, [toast]);
+
+  const showToast = (msg, opts = {}) => setToast({ id: Math.random(), msg, ...opts });
+  const patchConv = (id, fn) => setConvs((cs) => cs.map((c) => (c.id === id ? fn(c) : c)));
+
+  // Roteiro ao vivo. Com prefers-reduced-motion, tudo acontece de uma vez no primeiro tick.
+  useEffect(() => {
+    const ctx = { t: now, setSf, setWaitlist, toast: showToast };
+    while (stepRef.current < LIVE_STEPS.length) {
+      const s = LIVE_STEPS[stepRef.current];
+      if (!REDUCED && now < START + s.at) break;
+      stepRef.current += 1;
+      s.run(patchConv, { ...ctx, t: REDUCED ? START + s.at : now });
+    }
+  }, [now]);
+
+  const tomorrow = useMemo(() => convs.filter((c) => c.day === "amanha").sort((a, b) => {
+    const rank = { humano: 0, aguardando: 1, reagendado: 2, confirmado: 3 };
+    return rank[a.state] - rank[b.state] || b.lastAt - a.lastAt;
+  }), [convs]);
+
+  const counts = useMemo(() => {
+    const k = { total: tomorrow.length, confirmado: 0, reagendado: 0, aguardando: 0, humano: 0 };
+    tomorrow.forEach((c) => { k[c.state] += 1; });
+    return k;
+  }, [tomorrow]);
+  const revenue = useMemo(() => tomorrow.filter((c) => c.state === "confirmado" || c.state === "reagendado").reduce((s, c) => s + (c.payer.kind === "part" ? c.payer.value : CONV_TICKET), 0), [tomorrow]);
+  const base = useRef({ reagendado: 3, revenue: 0 });
+  if (!base.current.revenue) base.current.revenue = revenue;
+  const autonomy = Math.round(((counts.confirmado + counts.reagendado) / counts.total) * 100);
+
+  const list = useMemo(() => filter === "all" ? tomorrow : tomorrow.filter((c) => c.state === filter), [tomorrow, filter]);
+  const selected = convs.find((c) => c.id === selectedId) || null;
+
+  const focusRow = (id) => requestAnimationFrame(() => {
+    const el = document.querySelector(`[data-cid="${id}"]`);
+    if (el) { el.focus({ preventScroll: true }); el.scrollIntoView({ block: "nearest", behavior: REDUCED ? "auto" : "smooth" }); }
+  });
+  const select = (id) => setSelectedId(id);
+  const open = (id) => { setSelectedId(id); setView("thread"); };
+
+  function move(dir) {
+    if (!list.length) return;
+    let i = list.findIndex((c) => c.id === selectedId);
+    i = i < 0 ? 0 : Math.min(list.length - 1, Math.max(0, i + dir));
+    select(list[i].id); focusRow(list[i].id);
+  }
+
+  function takeover(id) {
+    const c = convs.find((x) => x.id === id); if (!c || c.human) return;
+    const prev = { convs, waitlist };
+    patchConv(id, (x) => ({ ...x, human: true, msgs: [...x.msgs, sys(now, "Hand", "fg", "Carla Mendes assumiu a conversa · Copilot pausado")] }));
+    showToast(`Você assumiu a conversa de ${c.name} · o Copilot fica em espera`, { icon: "Hand", tone: "ai", undo: prev });
+  }
+  function release(id) {
+    const c = convs.find((x) => x.id === id); if (!c || !c.human) return;
+    const prev = { convs, waitlist };
+    patchConv(id, (x) => ({ ...x, human: false, state: x.state === "humano" ? "confirmado" : x.state, msgs: [...x.msgs, sys(now, "Sparkles", "ai", "Copilot retomou a conversa")] }));
+    showToast(`Copilot retomou a conversa de ${c.name}`, { icon: "Sparkles", tone: "ai", undo: prev });
+    focusRow(id);
+  }
+  function send(id, text) {
+    patchConv(id, (x) => ({ ...x, lastAt: now, preview: text, msgs: [...x.msgs, { k: "human", t: now, text }] }));
+  }
+  function offer(id) {
+    const w = waitlist.find((x) => x.id === id); if (!w || w.offeredAt) return;
+    const prev = { convs, waitlist };
+    setWaitlist((ws) => ws.map((x) => (x.id === id ? { ...x, offeredAt: now } : x)));
+    showToast(`Oferta enviada a ${w.name} pela próxima vaga de ${DOCS[w.doc].short} · o Copilot acompanha a resposta`, { icon: "Send", tone: "ai", undo: prev });
+  }
+  function moveWait(id, dir) {
+    const i = waitlist.findIndex((x) => x.id === id); if (i < 0) return;
+    const j = i + dir;
+    if (j < 0 || j >= waitlist.length || waitlist[j].urgency !== waitlist[i].urgency) return;
+    const prev = { convs, waitlist };
+    const next = [...waitlist]; [next[i], next[j]] = [next[j], next[i]];
+    setWaitlist(next);
+    showToast(`${waitlist[i].name} ${dir < 0 ? "subiu" : "desceu"} na fila ${URGENCY.find((u) => u.id === waitlist[i].urgency).label.toLowerCase()}`, { icon: "ListOrdered", undo: prev });
+    requestAnimationFrame(() => { const el = document.querySelector(`[data-wid="${id}"]`); el && el.focus({ preventScroll: true }); });
+  }
+  function undo() {
+    if (!toast || !toast.undo) return;
+    setConvs(toast.undo.convs); setWaitlist(toast.undo.waitlist);
+    setToast({ id: Math.random(), msg: "Ação desfeita", icon: "Undo2", tone: "ai" });
+  }
+  const navigate = (label) => showToast(`${label} é outra tela desta série. O Centro de Resgate continua ao vivo.`, { icon: "LayoutGrid", tone: "ai" });
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const k = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && k === "k") { e.preventDefault(); setPalette((o) => !o); return; }
+      if (palette || help) return;
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") { if (e.key === "Escape" && selected && selected.human) { e.preventDefault(); release(selected.id); } return; }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "/") { e.preventDefault(); setPalette(true); return; }
+      if (e.key === "?") { e.preventDefault(); setHelp(true); return; }
+      if (e.key === "Escape") { if (selected && selected.human) release(selected.id); else setView("list"); return; }
+      if (k === "z") { e.preventDefault(); undo(); return; }
+      if (["1", "2", "3", "4", "5"].includes(e.key)) { e.preventDefault(); setFilter(FILTERS[Number(e.key) - 1].id); return; }
+      if (e.target.closest && e.target.closest("[data-wid]")) return; // fila: setas e O ficam com o item
+      if (["arrowdown", "j"].includes(k)) { e.preventDefault(); move(1); return; }
+      if (["arrowup", "k"].includes(k)) { e.preventDefault(); move(-1); return; }
+      if (e.key === "Enter" && selectedId) { setView("thread"); return; }
+      if (k === "t" && selected) { e.preventDefault(); takeover(selected.id); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const closeOverlay = (setter) => () => { setter(false); selectedId && focusRow(selectedId); };
+
+  const paletteItems = useMemo(() => {
+    const items = convs.map((c) => ({
+      id: "c-" + c.id, group: c.day === "hoje" ? "Smart Fill de hoje" : "Conversas de amanhã", icon: "MessageCircle", label: c.name,
+      hint: `${hm(c.time)} · ${DOCS[c.doc].short} · ${c.human ? "Humano no controle" : STATES[c.state].label}`,
+      run: () => { open(c.id); focusRow(c.id); },
+    }));
+    const esc = tomorrow.find((c) => c.state === "humano" && !c.human);
+    const top = waitlist.find((w) => !w.offeredAt);
+    const actions = [
+      esc && { id: "a-take", group: "Ações", icon: "Hand", tone: "warn", label: `Assumir conversa de ${esc.name}`, hint: "Precisa de humano · pergunta de preço", kbd: ["T"], run: () => { open(esc.id); takeover(esc.id); } },
+      top && { id: "a-offer", group: "Ações", icon: "Send", tone: "ai", label: `Oferecer próxima vaga a ${top.name}`, hint: `${top.proc} · ${DOCS[top.doc].short}`, kbd: ["O"], run: () => offer(top.id) },
+      { id: "a-theme", group: "Ações", icon: "SunMoon", label: "Alternar tema claro e escuro", run: () => window.__toggleTheme && window.__toggleTheme() },
+      { id: "a-help", group: "Ações", icon: "Keyboard", label: "Mostrar atalhos de teclado", kbd: ["?"], run: () => setHelp(true) },
+    ].filter(Boolean);
+    const nav = [
+      { id: "n-cockpit", group: "Ir para", icon: "LayoutGrid", label: "Cockpit", hint: "Fluxo ao vivo da clínica", run: () => navigate("O Cockpit") },
+      { id: "n-agenda", group: "Ir para", icon: "CalendarDays", label: "Agenda inteligente", hint: "Dia, semana e por profissional", run: () => navigate("A Agenda inteligente") },
+      { id: "n-p360", group: "Ir para", icon: "UsersRound", label: "Paciente 360", hint: "Ficha, exames e continuidade", run: () => navigate("O Paciente 360") },
+    ];
+    return [...actions, ...items, ...nav];
+  }, [convs, tomorrow, waitlist]);
+
+  return (
+    <div className="min-h-full">
+      <Header now={now} openCount={counts.aguardando + counts.humano} autonomy={autonomy} onOpenPalette={() => setPalette(true)} onNavigate={navigate} />
+
+      <main className="mx-auto flex max-w-[1680px] flex-col gap-4 px-4 pb-24 pt-4 sm:px-6">
+        <Kpis counts={counts} revenue={revenue} base={base.current} />
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-1">
+          <h1 className="text-[15px] font-semibold tracking-tight">Centro de Resgate</h1>
+          <span className="text-[12px] text-muted">o Copilot confirma, remarca e repõe vagas; você só entra quando ele chama</span>
+          <button type="button" onClick={() => setHelp(true)} className="ml-auto hidden items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted hover:bg-sunken hover:text-fg sm:inline-flex"><Kbd>?</Kbd>atalhos</button>
+        </div>
+        <FilterBar filter={filter} setFilter={setFilter} counts={counts} />
+
+        <div className="grid gap-4 md:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_340px]">
+          <ConvList list={list} now={now} selectedId={selectedId} onSelect={select} onOpen={open} filter={filter} hidden={view === "thread"} />
+          <Thread c={selected} now={now} onBack={() => setView("list")} onTakeover={takeover} onRelease={release} onSend={send} hidden={view !== "thread"} />
+          <Waitlist waitlist={waitlist} sf={sf} now={now} onOffer={offer} onMove={moveWait} onOpenConv={open} hidden={view === "thread"} />
+        </div>
+
+        <footer className="hidden flex-wrap items-center gap-x-4 gap-y-2 border-t border-fg/[0.06] px-1 pt-3 text-[12px] text-muted md:flex">
+          {[["J K", "navegar"], ["T", "assumir"], ["Esc", "devolver ao Copilot"], ["1–5", "filtros"], ["O", "oferecer vaga"], ["Alt ↑↓", "reordenar fila"], ["Z", "desfazer"]].map(([k, l]) => (
+            <span key={k} className="inline-flex items-center gap-1.5"><Kbd>{k}</Kbd>{l}</span>
+          ))}
+          <span className="ml-auto text-faint">Dados de exemplo · {CLINIC}</span>
+        </footer>
+      </main>
+
+      {palette && <CommandPalette items={paletteItems} onClose={closeOverlay(setPalette)} />}
+      {help && <ShortcutsDialog onClose={closeOverlay(setHelp)} />}
+      <Toast toast={toast} onUndo={undo} onClose={() => setToast(null)} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>

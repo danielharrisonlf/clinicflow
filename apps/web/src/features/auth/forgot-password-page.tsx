@@ -1,7 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
+import { ChevronLeft, MailCheck } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { ApiError } from "@/lib/api/client";
 import { authApi } from "@/lib/api/endpoints";
@@ -19,33 +20,41 @@ export function ForgotPasswordPage() {
   if (request.isSuccess) {
     return (
       <AuthLayout title="Verifique seu e-mail">
-        <p className="text-body text-ink-secondary">
-          Se houver uma conta em{" "}
-          <strong className="text-ink-primary">{email}</strong>, o link de
-          redefinição chega em instantes. Ele vale por 30 minutos.
-        </p>
-        <p className="mt-3 text-micro text-ink-tertiary">
-          Não chegou? Confira a caixa de spam ou peça outro link.
-        </p>
-        <div className="mt-5 flex gap-2">
-          <Button variant="secondary" onClick={() => request.reset()}>
-            Pedir outro
-          </Button>
-          <Link
-            to="/entrar"
-            className="flex h-10 items-center px-3 text-micro font-semibold text-accent hover:underline"
-          >
-            Voltar ao login
-          </Link>
+        <div className="flex flex-col gap-4">
+          <span className="flex size-12 items-center justify-center rounded-full bg-success-weak text-success">
+            <MailCheck className="size-6" aria-hidden="true" />
+          </span>
+          <p className="text-body text-ink-secondary" role="status">
+            Se houver uma conta em{" "}
+            <strong className="text-ink-primary">{email}</strong>, o link de
+            redefinição chega em instantes. Ele vale por 30 minutos.
+          </p>
+          <p className="text-label text-ink-tertiary">
+            Não chegou? Confira a caixa de spam ou peça outro link.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <ButtonLink to="/entrar">Voltar ao login</ButtonLink>
+            <Button variant="secondary" onClick={() => request.reset()}>
+              Pedir outro link
+            </Button>
+          </div>
         </div>
       </AuthLayout>
     );
   }
 
+  const error = request.isError
+    ? request.error instanceof ApiError
+      ? request.error.statusCode === 429
+        ? "Muitos pedidos seguidos. Aguarde um minuto e tente de novo."
+        : request.error.message
+      : "Não foi possível enviar. Verifique a conexão e tente de novo."
+    : undefined;
+
   return (
     <AuthLayout
       title="Recuperar senha"
-      description="Informe o e-mail da sua conta e enviamos um link para você criar uma senha nova."
+      description="Informe o e-mail da sua conta. Enviamos um link para você criar uma senha nova."
     >
       <form
         className="flex flex-col gap-4"
@@ -59,16 +68,12 @@ export function ForgotPasswordPage() {
           type="email"
           name="email"
           autoComplete="username"
+          inputMode="email"
           required
+          autoFocus
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          error={
-            request.isError
-              ? request.error instanceof ApiError
-                ? request.error.message
-                : "Não foi possível enviar. Tente de novo."
-              : undefined
-          }
+          error={error}
         />
 
         <Button type="submit" block size="lg" loading={request.isPending}>
@@ -77,8 +82,9 @@ export function ForgotPasswordPage() {
 
         <Link
           to="/entrar"
-          className="self-center text-micro font-semibold text-accent hover:underline"
+          className="inline-flex items-center gap-1 self-center rounded-marker text-label font-semibold text-accent-ink hover:underline pointer-coarse:py-2"
         >
+          <ChevronLeft className="size-4" aria-hidden="true" />
           Voltar ao login
         </Link>
       </form>

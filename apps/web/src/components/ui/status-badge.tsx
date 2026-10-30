@@ -1,29 +1,39 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  Armchair,
+  Ban,
+  CheckCheck,
+  CircleCheck,
+  Clock3,
+  Repeat,
+  Stethoscope,
+  TriangleAlert,
+} from "lucide-react";
 import type { DerivedState } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 /**
  * Selo de estado. Espelha a máquina de estados da consulta um para um.
  *
- * Só CHECK_IN é preenchido sólido, porque é o único estado que pede ação
- * imediata da recepção — se todos fossem sólidos, nenhum chamaria atenção.
- * Âmbar como tinta sobre claro nunca é #F2C64B: vira #7A4A00, que passa em AA.
+ * Cada estado tem matiz e ícone próprios: cor nunca é o único sinal (daltonismo,
+ * monitor velho no balcão). Só CHECK_IN é preenchido forte, porque é o único
+ * estado que pede ação imediata — se todos gritassem, nenhum chamaria atenção.
+ * Concluída e cancelada recuam: já saíram da fila de trabalho.
  */
 const STATE_STYLE: Record<DerivedState, string> = {
   AGENDADA: "text-state-agendada border-border-default bg-transparent",
   CONFIRMADA:
-    "text-state-confirmada border-state-confirmada/25 bg-state-confirmada-weak",
+    "text-state-confirmada border-transparent bg-state-confirmada-weak",
   CHECK_IN: "text-state-espera border-transparent bg-state-espera-weak",
   EM_ATENDIMENTO:
-    "text-state-atendimento border-state-atendimento/25 bg-state-atendimento-weak",
-  CONCLUIDA:
-    "text-state-concluida border-state-concluida/25 bg-state-concluida-weak",
-  CANCELADA: "text-ink-tertiary border-border-subtle bg-surface-sunken",
-  REAGENDADA: "text-ink-tertiary border-border-subtle bg-surface-sunken",
-  ATRASADA:
-    "text-state-atrasada border-state-atrasada/25 bg-state-atrasada-weak",
+    "text-state-atendimento border-transparent bg-state-atendimento-weak",
+  CONCLUIDA: "text-state-concluida border-transparent bg-state-concluida-weak",
+  CANCELADA: "text-state-cancelada border-transparent bg-state-cancelada-weak",
+  REAGENDADA: "text-state-cancelada border-transparent bg-state-cancelada-weak",
+  ATRASADA: "text-state-atrasada border-transparent bg-state-atrasada-weak",
 };
 
-const STATE_LABEL: Record<DerivedState, string> = {
+export const STATE_LABEL: Record<DerivedState, string> = {
   AGENDADA: "Agendada",
   CONFIRMADA: "Confirmada",
   CHECK_IN: "Aguardando",
@@ -34,45 +44,57 @@ const STATE_LABEL: Record<DerivedState, string> = {
   ATRASADA: "Atrasada",
 };
 
-const STATE_DOT: Record<DerivedState, string> = {
+export const STATE_ICON: Record<DerivedState, LucideIcon> = {
+  AGENDADA: Clock3,
+  CONFIRMADA: CircleCheck,
+  CHECK_IN: Armchair,
+  EM_ATENDIMENTO: Stethoscope,
+  CONCLUIDA: CheckCheck,
+  CANCELADA: Ban,
+  REAGENDADA: Repeat,
+  ATRASADA: TriangleAlert,
+};
+
+/** Cor de traço do estado, para a barra da agenda e o marcador da timeline. */
+export const STATE_SOLID: Record<DerivedState, string> = {
   AGENDADA: "bg-state-agendada",
   CONFIRMADA: "bg-state-confirmada",
   CHECK_IN: "bg-state-espera",
-  EM_ATENDIMENTO: "bg-state-atendimento animate-pulse",
+  EM_ATENDIMENTO: "bg-state-atendimento",
   CONCLUIDA: "bg-state-concluida",
-  CANCELADA: "bg-ink-tertiary",
-  REAGENDADA: "bg-ink-tertiary",
+  CANCELADA: "bg-state-cancelada",
+  REAGENDADA: "bg-state-cancelada",
   ATRASADA: "bg-state-atrasada",
 };
 
 export function StatusBadge({
   state,
   label,
+  size = "md",
   className,
 }: {
   state: DerivedState;
   /** O backend já manda pronto ("Atrasada 27min"). Sem ele, cai no rótulo fixo. */
   label?: string;
+  size?: "sm" | "md";
   className?: string;
 }) {
+  const Icon = STATE_ICON[state];
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5",
-        "text-micro font-medium tracking-tight",
-        // CHECK_IN é o único sólido: o peso vem do preenchimento, não do peso da fonte.
-        state === "CHECK_IN" && "font-bold",
+        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border font-semibold",
+        size === "sm" ? "h-5 px-1.5 text-micro" : "h-6 px-2 text-micro",
         STATE_STYLE[state],
         className,
       )}
     >
-      <span
-        className={cn("size-1.5 rounded-full shrink-0", STATE_DOT[state])}
+      <Icon
+        className="size-3.5 shrink-0"
+        strokeWidth={2.25}
         aria-hidden="true"
       />
       {label ?? STATE_LABEL[state]}
     </span>
   );
 }
-
-export { STATE_LABEL };

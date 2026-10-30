@@ -91,12 +91,24 @@ export interface PageOptions {
   search?: string;
 }
 
-/** Envelope único do `AllExceptionsFilter`. */
+/**
+ * Problema de validação. O Zod manda `{ path, message, code }`; o
+ * class-validator manda só a frase. O cliente normaliza os dois para este formato.
+ */
+export interface ValidationIssue {
+  path: string;
+  message: string;
+}
+
+/**
+ * Envelope único do `AllExceptionsFilter`. `details` é objeto, nunca lista:
+ * `{ issues }` em validação, ou campos de domínio (`{ conflictWithId, … }`).
+ */
 export interface ErrorEnvelope {
   statusCode: number;
   code: string;
   message: string;
-  details?: string[];
+  details?: Record<string, unknown>;
   path: string;
   timestamp: string;
 }
@@ -140,6 +152,8 @@ export interface AppointmentListItem {
   notes: string | null;
   /** O front acende só os botões válidos — a máquina de estados mora no backend. */
   allowedTransitions: AppointmentStatus[];
+  /** Encaixe autorizado sobre um horário já ocupado. */
+  isOverbooked: boolean;
 }
 
 export interface AppointmentDetail extends AppointmentListItem {
@@ -205,7 +219,12 @@ export interface ListAppointmentsQuery extends PageOptions {
   patientId?: string;
   status?: AppointmentStatus[];
   type?: AppointmentType;
-  onlyLate?: boolean;
+  /** Só `ATRASADA` é implementado no backend. */
+  derivedState?: "ATRASADA";
+  /** Busca por nome do paciente. */
+  search?: string;
+  /** Ordenação por `startsAt` — o backend ignora `order`/`orderBy` aqui. */
+  direction?: "asc" | "desc";
 }
 
 export interface CreateAppointmentInput {
@@ -229,8 +248,9 @@ export interface RescheduleInput {
 }
 
 export interface CancelInput {
-  reasonCode: CancelReason;
-  note?: string;
+  reason: CancelReason;
+  /** Obrigatório (≥3 letras) quando o motivo é OUTRO. */
+  notes?: string;
 }
 
 export interface CheckAvailabilityInput {
@@ -238,12 +258,20 @@ export interface CheckAvailabilityInput {
   date: string;
   time: string;
   durationMinutes?: number;
-  ignoreAppointmentId?: string;
+  /** Reagendamento: a própria consulta não conta como conflito. */
+  excludeAppointmentId?: string;
 }
 
 export interface TodaySummary {
   date: string;
   dateLabel: string;
+  /** Contagens autoritativas: incluem reagendadas e respeitam o filtro do dia. */
+  total: number;
+  open: number;
+  rescheduled: number;
+  unconfirmed: number;
+  /** Próxima chegada prevista, com o mesmo contrato da lista de consultas. */
+  nextArrival: AppointmentListItem | null;
   scheduled: number;
   confirmed: number;
   waiting: number;
@@ -257,12 +285,17 @@ export interface WaitingRoomItem {
   appointmentId: string;
   patientId: string;
   patientName: string;
+  patientPhone: string;
+  type: AppointmentType;
   professionalName: string;
   waitingMinutes: number;
   waitingLabel: string;
   checkedInAtLabel: string;
   scheduledAtLabel: string;
+  /** "Aguardando" ou "Atrasada" (passou da tolerância do horário marcado). */
   state: string;
+  isLate: boolean;
+  /** Já foi chamado no painel da TV e ainda não entrou. */
   wasCalled: boolean;
 }
 
@@ -270,6 +303,7 @@ export interface WaitingRoomMetrics {
   waitingCount: number;
   averageWaitMinutes: number;
   longestWaitMinutes: number;
+  inProgressCount: number;
 }
 
 export interface PatientListItem {
@@ -314,12 +348,15 @@ export interface Professional {
   id: string;
   name: string;
   specialty: string;
-  councilType: string;
-  councilNumber: string;
-  active: boolean;
+  /** Rótulo pronto: "Clínica Geral (CRM 142.890)". */
+  credential: string;
+  /** Rótulo pronto: "Seg, Qua, Qui, Sex". */
+  workdaysLabel: string;
+  isActive: boolean;
   defaultDurationMinutes: number;
   todayAppointmentsCount: number;
   openTasksCount: number;
+  userId: string | null;
 }
 
 export interface ScheduleWindow {
@@ -341,10 +378,12 @@ export interface DocumentItem {
   fileName: string;
   format: string;
   type: DocumentType;
-  sizeBytes: number;
+  /** Rótulo pronto: "Exame laboratorial". */
+  typeLabel: string;
+  byteSize: number;
   sizeLabel: string;
-  patientId: string | null;
-  patientName: string | null;
+  patientId: string;
+  patientName: string;
   appointmentId: string | null;
   source: string | null;
   createdAt: string;
@@ -358,10 +397,34 @@ export interface ListDocumentsQuery extends PageOptions {
   to?: string;
 }
 
+export interface DocumentDownload {
+  /** No driver local é caminho relativo (`/api/v1/uploads/…`); no S3, URL assinada. */
+  url: string;
+  fileName: string;
+  expiresIn: number;
+}
+
+export interface UploadTicket {
+  uploadUrl: string;
+  objectKey: string;
+  expiresIn: number;
+  headers: Record<string, string>;
+}
+
+export interface CreateDocumentInput {
+  objectKey: string;
+  patientId: string;
+  fileName: string;
+  appointmentId?: string;
+  type?: DocumentType;
+  source?: string;
+}
+
 export interface TaskItem {
   id: string;
   patientId: string;
   patientName: string;
+  patientPhone: string;
   appointmentId: string | null;
   type: TaskType;
   status: TaskStatus;
@@ -371,8 +434,20 @@ export interface TaskItem {
   dueLabel: string;
   isUrgent: boolean;
   notes: string | null;
-  /** Ação sugerida do funil: "WhatsApp", "Agendar", "Enviar guia". */
+  /** Ação sugerida do funil: "Agendar retorno", "Confirmar", "Ligar WhatsApp". */
   suggestedAction: string;
+  lastContactAt: string | null;
+  createdAt: string;
+}
+
+export interface CreateTaskInput {
+  patientId: string;
+  type: TaskType;
+  title: string;
+  appointmentId?: string;
+  /** `YYYY-MM-DD`: o backend guarda o fim daquele dia. */
+  dueAt?: string;
+  notes?: string;
 }
 
 export interface TaskSummary {
@@ -386,6 +461,7 @@ export interface ListTasksQuery extends PageOptions {
   type?: TaskType[];
   status?: TaskStatus[];
   dueBefore?: string;
+  patientId?: string;
 }
 
 export interface Settings {
@@ -415,14 +491,17 @@ export interface WhatsappSettings {
 }
 
 export interface SearchAction {
+  /** `new-appointment`, `open-waiting-room`, `new-patient`. */
   id: string;
-  label: string;
-  shortcut: string;
+  title: string;
+  subtitle: string | null;
+  shortcut: string | null;
 }
 
 export interface SearchPatient {
   id: string;
   name: string;
+  phone: string;
   subtitle: string | null;
   stateLabel: string | null;
 }
@@ -430,7 +509,8 @@ export interface SearchPatient {
 export interface SearchProfessional {
   id: string;
   name: string;
-  specialty: string;
+  /** "Cardiologia (CRM 119.450)". */
+  subtitle: string;
 }
 
 export interface SearchResult {

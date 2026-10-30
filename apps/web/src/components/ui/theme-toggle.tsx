@@ -1,7 +1,6 @@
-import { Monitor, Moon, Sun } from "lucide-react";
-import { useId } from "react";
+import { Check, Monitor, Moon, Sun } from "lucide-react";
 import { type ThemePreference, useTheme } from "@/lib/theme";
-import { cn } from "@/lib/utils";
+import { SegmentedControl } from "./segmented";
 
 const OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Claro", icon: Sun },
@@ -12,46 +11,54 @@ const OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
 /**
  * Três estados, não dois. "Sistema" é o padrão porque a recepção troca de
  * turno: quem entra à noite herda a preferência do aparelho sem mexer em nada.
- *
- * Radios de verdade, não botões com `role`: o grupo já navega com as setas e é
- * anunciado como escolha única, sem nada disso precisar ser reimplementado.
  */
-export function ThemeToggle({ compact = false }: { compact?: boolean }) {
+export function ThemeToggle() {
   const { preference, setPreference } = useTheme();
-  const name = useId();
-
   return (
-    <fieldset
-      className={cn(
-        "flex gap-0.5 rounded-control bg-surface-sunken p-0.5",
-        compact && "flex-col",
-      )}
-    >
-      <legend className="sr-only">Tema</legend>
-      {OPTIONS.map((option) => (
-        <label
-          key={option.value}
-          title={option.label}
-          className={cn(
-            "flex h-8 flex-1 cursor-pointer items-center justify-center rounded-marker transition-colors",
-            "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent",
-            preference === option.value
-              ? "bg-surface-base text-ink-primary shadow-raised"
-              : "text-ink-tertiary hover:text-ink-primary",
-          )}
-        >
-          <input
-            type="radio"
-            name={name}
-            value={option.value}
-            checked={preference === option.value}
-            onChange={() => setPreference(option.value)}
-            className="sr-only"
-          />
-          <option.icon className="size-4" aria-hidden="true" />
-          <span className="sr-only">{option.label}</span>
-        </label>
-      ))}
-    </fieldset>
+    <SegmentedControl
+      label="Tema"
+      value={preference}
+      onChange={setPreference}
+      className="w-full [&>label]:flex-1 [&>label]:justify-center"
+      options={OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+        icon: <option.icon className="size-4" aria-hidden="true" />,
+      }))}
+    />
+  );
+}
+
+/** As mesmas três escolhas como itens de menu (menu do usuário). */
+export function ThemeMenuItems() {
+  const { preference, setPreference } = useTheme();
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: grupo de menuitemradio no padrão WAI-ARIA
+    <div role="group" aria-label="Tema">
+      {OPTIONS.map((option) => {
+        const active = preference === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="menuitemradio"
+            aria-checked={active}
+            tabIndex={-1}
+            data-keep-open=""
+            onClick={() => setPreference(option.value)}
+            className="flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-body font-medium text-ink-primary outline-none transition-colors hover:bg-surface-sunken focus-visible:bg-surface-sunken focus-visible:ring-2 focus-visible:ring-accent-ink pointer-coarse:min-h-11"
+          >
+            <option.icon
+              className="size-4 text-ink-secondary"
+              aria-hidden="true"
+            />
+            <span className="flex-1">Tema {option.label.toLowerCase()}</span>
+            {active ? (
+              <Check className="size-4 text-accent-ink" aria-hidden="true" />
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
   );
 }

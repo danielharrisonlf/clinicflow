@@ -83,6 +83,7 @@ enum Channel {
 
 enum NotificationStatus {
   PENDENTE
+  SIMULADA
   ENVIADA
   FALHOU
   RESPONDIDA
@@ -276,6 +277,10 @@ model Appointment {
 
   rescheduledFromId String? @unique @map("rescheduled_from_id")
 
+  /// Encaixe autorizado pela recepção: a consulta foi gravada por cima de
+  /// outra e por isso fica fora da trava `appointments_no_overlap`.
+  isOverbooked Boolean @default(false) @map("is_overbooked")
+
   createdById String?  @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -390,6 +395,7 @@ model Task {
 model Notification {
   id            String             @id
   appointmentId String?            @map("appointment_id")
+  deduplicationKey String?          @unique @map("deduplication_key")
   channel       Channel            @default(WHATSAPP)
   to            String
   body          String

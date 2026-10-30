@@ -88,11 +88,20 @@ export const ClinicTime = {
   },
 
   /** Idade em anos completos a partir da data de nascimento. */
+  /**
+   * Coluna `@db.Date` (nascimento) → `YYYY-MM-DD`. O Prisma devolve meia-noite
+   * UTC; converter para o fuso da clínica (UTC-3) recuava um dia.
+   */
+  dateOnlyOf(value: Date): string {
+    return DateTime.fromJSDate(value, { zone: "utc" }).toISODate() ?? "";
+  },
+
   ageOf(birthDate: Date | null): number | null {
     if (!birthDate) return null;
-    const years = DateTime.now()
-      .setZone(this.zone)
-      .diff(DateTime.fromJSDate(birthDate).setZone(this.zone), "years").years;
+    const born = DateTime.fromISO(this.dateOnlyOf(birthDate), {
+      zone: this.zone,
+    });
+    const years = DateTime.now().setZone(this.zone).diff(born, "years").years;
     return Math.floor(years);
   },
 };

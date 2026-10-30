@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { AppointmentStatus, AppointmentType } from "@prisma/client";
 import { z } from "zod";
+import { ZodRequest } from "../../../common/decorators/zod-request.decorator";
 import { PageOptionsDto } from "../../../common/dto/page-options.dto";
 
 export const ListAppointmentsQuerySchema = z.object({
@@ -9,7 +10,11 @@ export const ListAppointmentsQuerySchema = z.object({
   to: z.string().optional(),
   professionalId: z.string().uuid().optional(),
   patientId: z.string().uuid().optional(),
-  status: z.nativeEnum(AppointmentStatus).optional(),
+  // Aceita `?status=A` ou `?status=A&status=B` (mesma convenção de /tasks).
+  status: z.preprocess(
+    (val) => (Array.isArray(val) ? val : val ? [val] : undefined),
+    z.array(z.nativeEnum(AppointmentStatus)).optional(),
+  ),
   derivedState: z.enum(["ATRASADA", "NAO_COMPARECEU"]).optional(),
   type: z.nativeEnum(AppointmentType).optional(),
   search: z.string().trim().optional(),
@@ -26,6 +31,12 @@ export const ListAppointmentsQuerySchema = z.object({
 
 export type ListAppointmentsQuery = z.infer<typeof ListAppointmentsQuerySchema>;
 
+/**
+ * Validada pelo schema do Zod no controller; `@ZodRequest()` impede o pipe
+ * global de reaplicar o class-validator herdado de `PageOptionsDto` e faz o
+ * pipe do Zod devolver uma instância (com `skip` e `direction`).
+ */
+@ZodRequest()
 export class ListAppointmentsQueryRequest
   extends PageOptionsDto
   implements ListAppointmentsQuery
@@ -50,9 +61,10 @@ export class ListAppointmentsQueryRequest
 
   @ApiPropertyOptional({
     enum: AppointmentStatus,
-    description: "Filtrar por status",
+    isArray: true,
+    description: "Filtrar por status (repita o parâmetro para vários)",
   })
-  status?: AppointmentStatus;
+  status?: AppointmentStatus[];
 
   @ApiPropertyOptional({
     enum: ["ATRASADA", "NAO_COMPARECEU"],

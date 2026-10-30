@@ -1,0 +1,1380 @@
+<title>ClinicFlow Paciente 360</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky glass header → patient identity bar → Pathway hero + tabs (main) | demographics + other pathways (side).
+   Tokens are RGB triplets so Tailwind can apply alpha (bg-ok/10, border-fg/[0.08]). */
+:root {
+  --bg: 251 251 253;      /* off-white editorial */
+  --surface: 255 255 255;
+  --sunken: 244 244 247;
+  --fg: 17 17 22;
+  --muted: 92 92 106;
+  --faint: 140 140 155;
+  --ok: 5 150 105;        /* esmeralda: fluxo positivo, receita */
+  --ai: 79 70 229;        /* índigo: Copilot, inteligência */
+  --warn: 180 83 9;       /* âmbar: atenção, atraso */
+  --bad: 225 29 72;       /* carmim: desistência, estouro */
+  --font-ui: "Geist", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-data: "Geist Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: 9 9 11; --surface: 18 18 21; --sunken: 14 14 17; --fg: 244 244 246;
+    --muted: 161 161 170; --faint: 113 113 122;
+    --ok: 16 185 129; --ai: 129 140 248; --warn: 251 191 36; --bad: 251 113 133;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: 9 9 11; --surface: 18 18 21; --sunken: 14 14 17; --fg: 244 244 246;
+  --muted: 161 161 170; --faint: 113 113 122;
+  --ok: 16 185 129; --ai: 129 140 248; --warn: 251 191 36; --bad: 251 113 133;
+  color-scheme: dark;
+}
+html, body { background: rgb(var(--bg)); color: rgb(var(--fg)); }
+body { font-family: var(--font-ui); font-size: 14px; -webkit-font-smoothing: antialiased; }
+.tnum { font-variant-numeric: tabular-nums; }
+@keyframes enter { from { opacity: 0; transform: translateY(4px) scale(.99); } to { opacity: 1; transform: none; } }
+@keyframes flash { 0% { background: rgb(var(--ok) / .16); } 100% { background: transparent; } }
+@keyframes pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.anim-enter { animation: enter .28s cubic-bezier(.2,.8,.2,1) both; }
+.anim-flash { animation: flash 1.6s ease-out both; }
+.anim-pop { animation: pop .22s cubic-bezier(.2,.8,.2,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .anim-enter, .anim-flash, .anim-pop, .animate-ping, .animate-pulse, .animate-spin { animation: none !important; }
+  * { transition: none !important; }
+}
+#boot { padding: 48px 16px; color: rgb(var(--muted)); font: 14px/1.5 var(--font-ui); }
+</style>
+
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg: "rgb(var(--bg) / <alpha-value>)",
+          surface: "rgb(var(--surface) / <alpha-value>)",
+          sunken: "rgb(var(--sunken) / <alpha-value>)",
+          fg: "rgb(var(--fg) / <alpha-value>)",
+          muted: "rgb(var(--muted) / <alpha-value>)",
+          faint: "rgb(var(--faint) / <alpha-value>)",
+          ok: "rgb(var(--ok) / <alpha-value>)",
+          ai: "rgb(var(--ai) / <alpha-value>)",
+          warn: "rgb(var(--warn) / <alpha-value>)",
+          bad: "rgb(var(--bad) / <alpha-value>)",
+        },
+        fontFamily: {
+          sans: ["Geist", "ui-sans-serif", "system-ui", "Segoe UI", "sans-serif"],
+          mono: ['"Geist Mono"', "ui-monospace", "SFMono-Regular", "Consolas", "monospace"],
+        },
+      },
+    },
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script>window.react = window.React;</script>
+<script src="https://unpkg.com/lucide-react@0.454.0/dist/umd/lucide-react.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+
+<div id="root"><div id="boot">Carregando a ficha do paciente…</div></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* ───────────────────────── helpers ───────────────────────── */
+const Icon = ({ n, size = 16, className = "", sw = 1.75 }) => {
+  const C = window.LucideReact && window.LucideReact[n];
+  return C
+    ? <C size={size} strokeWidth={sw} className={className} aria-hidden="true" />
+    : <span aria-hidden="true" className={"inline-block shrink-0 " + className} style={{ width: size, height: size }} />;
+};
+const pad = (n) => String(n).padStart(2, "0");
+const T = (h, m, s = 0) => h * 3600 + m * 60 + s;
+const hm = (s) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}`;
+const hms = (s) => `${hm(s)}:${pad(Math.floor(s % 60))}`;
+const mmss = (s) => { s = Math.max(0, Math.floor(s)); return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; };
+const brl = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
+const first = (name) => name.split(" ")[0];
+const initials = (name) => name.split(" ").filter((w) => w.length > 2).slice(0, 2).map((w) => w[0]).join("");
+const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const cx = (...a) => a.filter(Boolean).join(" ");
+// Datas ISO (AAAA-MM-DD) → "25/09" e "25/09/2026". Sem Date para não sofrer com fuso.
+const dm = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const dmy = (iso) => `${dm(iso)}/${iso.slice(0, 4)}`;
+
+/* ───────────────────────── mock: Clínica Vértice ───────────────────────── */
+const CLINIC = "Clínica Vértice";
+const BASE_DATE = new Date(2026, 9, 9);
+const START = T(10, 42, 0);
+
+const DOCS = {
+  helena: { name: "Dra. Helena Prado", short: "Dra. Helena", spec: "Dermatologia", room: "Sala 1", color: "#8B5CF6" },
+  ramos: { name: "Dr. Rafael Ramos", short: "Dr. Ramos", spec: "Ortopedia", room: "Sala 2", color: "#0EA5E9" },
+  okada: { name: "Dra. Beatriz Okada", short: "Dra. Okada", spec: "Cardiologia", room: "Sala 3", color: "#EC4899" },
+  menezes: { name: "Dr. Thiago Menezes", short: "Dr. Menezes", spec: "Endocrinologia", room: "Sala 4", color: "#14B8A6" },
+};
+
+const conv = (label) => ({ kind: "conv", label });
+const part = (value) => ({ kind: "part", label: "Particular", value });
+
+// Dados demográficos fictícios (CPF de exemplo, telefone de exemplo).
+const PATIENT = {
+  id: "pt_camila",
+  name: "Camila Duarte",
+  age: 34, sex: "Feminino", birth: "1992-03-14",
+  cpf: "123.456.789-09", cpfMasked: "•••.456.789-••",
+  phone: "(11) 98765-4321",
+  email: "camila.duarte@exemplo.com.br",
+  address: "Rua das Figueiras, 120 · Pinheiros · São Paulo/SP",
+  since: "2023-03-18",
+  payer: "Unimed", card: "0 000 000000000 00-0", cardMasked: "•••• •••• 0000 00-0",
+  emergency: "Marcos Duarte (irmão) · (11) 9•••• -4322",
+  allergies: ["Dipirona"],
+  prefs: ["Prefere manhã", "WhatsApp ativo"],
+  ltv: 4860, yearVisits: 5, noShow: { count: 1, total: 11 },
+  consultingNow: { doc: "helena", startedAt: T(10, 35), planned: 30, type: "Consulta de acompanhamento" },
+};
+
+const SLOTS = [
+  { id: "s1", label: "Ter, 14/10 · 09:30", hint: "preferência de manhã da paciente" },
+  { id: "s2", label: "Qua, 15/10 · 08:45", hint: "primeiro horário do dia da Dra. Helena" },
+  { id: "s3", label: "Qui, 16/10 · 11:00", hint: "último dia dentro do prazo ideal" },
+];
+
+const PATHWAYS = [
+  {
+    id: "pw_biopsia", kind: "hero", doc: "helena", tone: "ai", task: "RETORNO_A_AGENDAR",
+    title: "Pathway de Continuidade",
+    alert: "Paciente realizou biópsia há 14 dias — agendamento de retorno para entrega de laudo pendente",
+    steps: [
+      { id: "st1", label: "Biópsia de pele (shave)", date: "2026-09-25", state: "done" },
+      { id: "st2", label: "Laudo anatomopatológico recebido", date: "2026-10-06", state: "done", docId: "e1" },
+      { id: "st3", label: "Retorno para entrega de laudo", hint: "prazo ideal até 16/10", state: "pending" },
+      { id: "st4", label: "Revisão em 6 meses", hint: "abr/2027", state: "future" },
+    ],
+  },
+  {
+    id: "pw_nevos", kind: "small", doc: "helena", tone: "ok", task: null,
+    title: "Revisão de nevos anual", status: "Em dia",
+    detail: "Mapeamento corporal feito em 12/06 · próxima revisão jun/2027",
+    steps: [
+      { id: "n1", label: "Mapeamento 12/06/2026", state: "done", docId: "e4" },
+      { id: "n2", label: "Revisão jun/2027", state: "future" },
+    ],
+    action: { label: "Programar lembrete", icon: "BellPlus", done: "Lembrete programado para mai/2027" },
+  },
+  {
+    id: "pw_tsh", kind: "small", doc: "menezes", tone: "warn", task: "AGUARDANDO_EXAME",
+    title: "Exame de sangue (TSH) pendente há 40 dias", status: "Atrasado",
+    detail: "Pedido em 30/08 pelo Dr. Menezes · sem resultado anexado · retorno depende do exame",
+    steps: [
+      { id: "t1", label: "Pedido 30/08", state: "done" },
+      { id: "t2", label: "Coleta", state: "pending" },
+      { id: "t3", label: "Retorno", state: "future" },
+    ],
+    action: { label: "Lembrar exame", icon: "Send", done: "Copilot enviou o pedido de exame e o link do laboratório conveniado" },
+  },
+];
+
+const APPOINTMENTS = [
+  { id: "a1", date: "2026-10-09", time: T(10, 30), doc: "helena", type: "Consulta de acompanhamento", status: "now", payer: part(380) },
+  { id: "a2", date: "2026-09-25", time: T(9, 0), doc: "helena", type: "Biópsia de pele (shave)", status: "done", payer: part(680) },
+  { id: "a3", date: "2026-09-11", time: T(8, 30), doc: "helena", type: "Consulta · lesão pigmentada no dorso", status: "done", payer: conv("Unimed") },
+  { id: "a4", date: "2026-08-30", time: T(9, 15), doc: "menezes", type: "Consulta · fadiga, pedido de TSH", status: "done", payer: conv("Unimed") },
+  { id: "a5", date: "2026-06-12", time: T(10, 0), doc: "helena", type: "Revisão de nevos anual", status: "done", payer: conv("Unimed") },
+  { id: "a6", date: "2026-03-20", time: T(14, 0), doc: "okada", type: "Avaliação cardiológica · ECG", status: "done", payer: part(450) },
+  { id: "a7", date: "2026-03-03", time: T(9, 0), doc: "menezes", type: "Retorno", status: "noshow", payer: conv("Unimed") },
+  { id: "a8", date: "2025-11-15", time: T(8, 45), doc: "helena", type: "Consulta", status: "done", payer: part(380) },
+];
+
+const EXAMS = [
+  { id: "e1", date: "2026-10-06", type: "LAUDO", typeLabel: "Laudo", title: "Laudo anatomopatológico · biópsia shave", source: "Lab. Patologia Diagnóstica", file: "laudo-ap-2026-10-06.pdf", size: "1,2 MB", kind: "laudo", doc: "helena", flagged: false },
+  { id: "e2", date: "2026-09-25", type: "EXAME_IMAGEM", typeLabel: "Imagem", title: "Dermatoscopia digital · dorso", source: CLINIC, file: "dermato-dorso-2026-09-25.jpg", size: "2,4 MB", kind: "derma", doc: "helena", flagged: false },
+  { id: "e3", date: "2026-06-12", type: "EXAME_IMAGEM", typeLabel: "Imagem", title: "Mapeamento corporal de nevos", source: CLINIC, file: "mapeamento-2026-06-12.pdf", size: "8,1 MB", kind: "map", doc: "helena", flagged: false },
+  { id: "e4", date: "2026-03-20", type: "OUTRO", typeLabel: "Exame", title: "ECG de repouso · 12 derivações", source: CLINIC, file: "ecg-2026-03-20.pdf", size: "640 KB", kind: "ecg", doc: "okada", flagged: false },
+  { id: "e5", date: "2026-03-02", type: "EXAME_LABORATORIAL", typeLabel: "Laboratorial", title: "Hemograma · lipidograma · glicemia", source: "Lab. São Lucas", file: "exames-2026-03-02.pdf", size: "310 KB", kind: "lab", doc: "okada", flagged: true },
+];
+// O mapeamento é o documento do passo "n1"; o laudo, do passo "st2".
+PATHWAYS[1].steps[0].docId = "e3";
+
+const MESSAGES = [
+  { id: "m1", date: "2026-09-25", t: T(11, 40), from: "copilot", text: "Olá, Camila! Orientações após a biópsia: mantenha o curativo seco por 24 h e evite sol direto na região por 7 dias. Qualquer sangramento, fale conosco por aqui." },
+  { id: "m2", date: "2026-09-25", t: T(12, 10), from: "patient", text: "Obrigada! Posso tomar banho normalmente?" },
+  { id: "m3", date: "2026-09-25", t: T(12, 11), from: "staff", text: "Pode sim, Camila. Só evite esfregar o curativo nas primeiras 24 h." },
+  { id: "m4", date: "2026-10-08", t: T(14, 2), from: "copilot", text: "Oi, Camila! Confirmando sua consulta amanhã, 09/10 às 10:30, com a Dra. Helena Prado. Responda 1 para confirmar ou 2 para remarcar." },
+  { id: "m5", date: "2026-10-08", t: T(14, 5), from: "patient", text: "1" },
+  { id: "m6", date: "2026-10-08", t: T(14, 5), from: "copilot", text: "Confirmado. Até amanhã às 10:30 — chegue 10 min antes para o check-in." },
+];
+
+const TABS = [
+  { id: "overview", label: "Visão geral", key: "o", icon: "LayoutDashboard" },
+  { id: "consults", label: "Consultas", key: "c", icon: "CalendarDays", count: APPOINTMENTS.length },
+  { id: "exams", label: "Exames", key: "e", icon: "FileText", count: EXAMS.length },
+  { id: "chat", label: "Conversas", key: "v", icon: "MessageCircle", count: MESSAGES.length },
+];
+
+/* ───────────────────────── small UI atoms ───────────────────────── */
+const DOT = { ai: "bg-ai", ok: "bg-ok", warn: "bg-warn", bad: "bg-bad", fg: "bg-fg/70", muted: "bg-faint" };
+const TEXT = { ai: "text-ai", ok: "text-ok", warn: "text-warn", bad: "text-bad", fg: "text-fg", muted: "text-muted" };
+
+function Pulse({ tone = "ok", live = true }) {
+  return (
+    <span className="relative flex h-2 w-2 shrink-0">
+      {live && <span className={cx("absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping", DOT[tone])} />}
+      <span className={cx("relative inline-flex h-2 w-2 rounded-full", DOT[tone])} />
+    </span>
+  );
+}
+
+function Kbd({ children, className = "" }) {
+  return (
+    <kbd className={cx("inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] border border-fg/[0.12] bg-surface px-1 font-mono text-[11px] font-medium leading-none text-muted shadow-[0_1px_0_rgb(var(--fg)/0.06)]", className)}>
+      {children}
+    </kbd>
+  );
+}
+
+function DocTag({ id }) {
+  const d = DOCS[id];
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: d.color }} />
+      <span className="truncate">{d.short}</span>
+    </span>
+  );
+}
+
+function Avatar({ name, size = 32 }) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center rounded-full border border-fg/[0.08] bg-sunken text-[11px] font-semibold tracking-wide text-fg/80"
+      style={{ width: size, height: size, fontSize: size >= 48 ? 16 : 11 }}
+      aria-hidden="true"
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+function Payer({ payer }) {
+  return payer.kind === "part"
+    ? <span className="text-[12px] text-muted">Particular · <span className="font-mono tnum text-fg/80">{brl(payer.value)}</span></span>
+    : <span className="text-[12px] text-muted">{payer.label}</span>;
+}
+
+function Chip({ tone = "muted", icon, children, className = "" }) {
+  const map = {
+    ai: "bg-ai/[0.08] text-ai border-ai/20",
+    ok: "bg-ok/[0.08] text-ok border-ok/20",
+    warn: "bg-warn/[0.08] text-warn border-warn/25",
+    bad: "bg-bad/[0.08] text-bad border-bad/25",
+    muted: "bg-sunken text-muted border-fg/[0.08]",
+  };
+  return (
+    <span className={cx("inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-[3px] text-[12px] font-medium leading-none", map[tone], className)}>
+      {icon && <Icon n={icon} size={12} sw={2} />}
+      <span className="truncate">{children}</span>
+    </span>
+  );
+}
+
+function Meter({ value, tone = "ok" }) {
+  return (
+    <div className="h-1 w-full overflow-hidden rounded-full bg-fg/[0.06]" role="presentation">
+      <div className={cx("h-full rounded-full transition-[width] duration-700 ease-out", DOT[tone])} style={{ width: `${Math.min(100, Math.max(2, value * 100))}%` }} />
+    </div>
+  );
+}
+
+function Btn({ k, icon, children, primary, onClick, className = "", busy, ...rest }) {
+  return (
+    <button type="button" onClick={onClick} disabled={busy} {...rest}
+      className={cx("inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 disabled:opacity-70",
+        primary ? "border-fg/90 bg-fg text-bg hover:bg-fg/85" : "border-fg/[0.1] bg-surface text-fg/80 hover:bg-sunken", className)}>
+      {k && <Kbd className={primary ? "border-bg/20 bg-bg/10 text-bg/80 shadow-none" : ""}>{k}</Kbd>}
+      {icon && <Icon n={icon} size={13} className={busy ? "animate-spin" : ""} />}
+      {children}
+    </button>
+  );
+}
+
+/* ───────────────────────── header ───────────────────────── */
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => {
+    const t = document.documentElement.dataset.theme;
+    return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+  const toggle = () => { const next = !dark; document.documentElement.dataset.theme = next ? "dark" : "light"; setDark(next); };
+  useEffect(() => { window.__toggleTheme = toggle; });
+  return (
+    <button type="button" onClick={toggle} aria-label={dark ? "Usar tema claro" : "Usar tema escuro"}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-fg/[0.08] text-muted transition-colors hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">
+      <Icon n={dark ? "Sun" : "Moon"} size={15} />
+    </button>
+  );
+}
+
+function Header({ now, onOpenPalette, onNavigate }) {
+  const label = BASE_DATE.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  const nav = [
+    { id: "cockpit", label: "Cockpit", icon: "LayoutGrid" },
+    { id: "agenda", label: "Agenda", icon: "CalendarDays" },
+    { id: "comms", label: "Comms", icon: "MessagesSquare", badge: 2 },
+    { id: "pacientes", label: "Pacientes", icon: "UsersRound", active: true },
+  ];
+  const c = PATIENT.consultingNow;
+  return (
+    <header className="sticky z-30 border-b border-fg/[0.08] bg-bg/80 backdrop-blur-xl" style={{ top: "env(safe-area-inset-top, 0px)" }}>
+      <div className="mx-auto flex h-14 max-w-[1680px] items-center gap-3 px-4 sm:px-6">
+        <div className="flex items-center gap-2">
+          <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-fg text-bg">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 12h4l2-5 4 10 2-5h6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight">ClinicFlow</span>
+          <span className="hidden text-[13px] text-faint lg:inline">/ {CLINIC}</span>
+        </div>
+        <nav className="ml-3 hidden items-center gap-0.5 md:flex" aria-label="Principal">
+          {nav.map((n) => (
+            <button key={n.id} type="button" onClick={() => !n.active && onNavigate(n.label)} aria-current={n.active ? "page" : undefined}
+              className={cx("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+                n.active ? "bg-sunken text-fg" : "text-muted hover:bg-sunken/70 hover:text-fg")}>
+              <Icon n={n.icon} size={14} />{n.label}
+              {n.badge && <span className="ml-0.5 rounded-full bg-ai/10 px-1.5 font-mono text-[11px] text-ai tnum">{n.badge}</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="flex-1" />
+        <button type="button" onClick={onOpenPalette}
+          className="inline-flex h-8 min-w-0 items-center gap-2 rounded-lg border border-fg/[0.08] bg-surface pl-2.5 pr-1.5 text-[13px] text-muted shadow-[0_1px_2px_rgb(var(--fg)/0.04)] transition-colors hover:border-fg/[0.16] hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 sm:w-64">
+          <Icon n="Search" size={14} />
+          <span className="hidden flex-1 truncate text-left sm:inline">Buscar paciente ou ação</span>
+          <span className="hidden items-center gap-0.5 sm:inline-flex"><Kbd>Ctrl</Kbd><Kbd>K</Kbd></span>
+        </button>
+        <ThemeToggle />
+        <span className="hidden items-center gap-2 border-l border-fg/[0.08] pl-3 sm:inline-flex">
+          <Avatar name="Carla Mendes" size={28} />
+          <span className="hidden flex-col leading-tight xl:flex"><span className="text-[13px] font-medium">Carla Mendes</span><span className="text-[11px] text-faint">Recepção · balcão 1</span></span>
+        </span>
+      </div>
+
+      <div className="mx-auto flex max-w-[1680px] flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-3 sm:px-6">
+        <nav aria-label="Trilha" className="inline-flex min-w-0 items-center gap-1.5 text-[13px]">
+          <button type="button" onClick={() => onNavigate("A lista de pacientes")} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-muted hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40"><Icon n="UsersRound" size={14} />Pacientes</button>
+          <Icon n="ChevronRight" size={14} className="text-faint" />
+          <span className="truncate font-medium" aria-current="page">{PATIENT.name}</span>
+        </nav>
+        <span className="text-[13px] text-muted first-letter:uppercase">{label}</span>
+        <span className="inline-flex items-center gap-2 font-mono text-[13px] text-muted tnum" aria-live="off">
+          <Pulse tone="ok" />ao vivo · {hms(now)}
+        </span>
+        <span className="inline-flex items-center gap-2 rounded-lg border border-ok/20 bg-ok/[0.06] px-2.5 py-1 text-[13px]">
+          <Icon n="DoorOpen" size={15} className="text-ok" />
+          <span className="text-faint">Agora</span>
+          <span className="font-medium text-ok">Em atendimento</span>
+          <span className="hidden text-muted md:inline">· {DOCS[c.doc].room} · {DOCS[c.doc].short} · <span className="font-mono tnum">{mmss(now - c.startedAt)}</span></span>
+        </span>
+      </div>
+    </header>
+  );
+}
+
+/* ───────────────────────── identity bar ───────────────────────── */
+function Stat({ label, value, unit, sub, tone }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5 px-4 py-2.5 sm:px-5">
+      <span className="text-[12px] font-medium text-muted">{label}</span>
+      <span className={cx("font-mono text-[22px] font-medium leading-none tracking-tight tnum", tone ? TEXT[tone] : "")}>{value}{unit && <span className="ml-0.5 text-[14px] text-muted">{unit}</span>}</span>
+      <span className="truncate text-[12px] text-faint">{sub}</span>
+    </div>
+  );
+}
+
+function IdentityBar({ cpfShown, onToggleCpf, onCopyPhone, onAction }) {
+  const p = PATIENT;
+  const ns = Math.round((p.noShow.count / p.noShow.total) * 100);
+  return (
+    <section aria-label="Identificação da paciente" className="anim-enter overflow-hidden rounded-2xl border border-fg/[0.08] bg-surface shadow-[0_1px_2px_rgb(var(--fg)/0.04)]">
+      <div className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-3.5">
+          <Avatar name={p.name} size={56} />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              <h1 className="text-[20px] font-semibold leading-tight tracking-tight">{p.name}</h1>
+              <span className="text-[13px] text-muted"><span className="font-mono tnum">{p.age}</span> anos · {p.sex}</span>
+              <span className="text-[13px] text-muted">{p.payer} <span className="text-faint">+ Particular</span></span>
+            </div>
+            <dl className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px]">
+              <div className="inline-flex items-center gap-1.5">
+                <dt className="text-faint">CPF</dt>
+                <dd className="inline-flex items-center gap-1">
+                  <span className="font-mono tnum" aria-live="polite">{cpfShown ? p.cpf : p.cpfMasked}</span>
+                  <button type="button" onClick={onToggleCpf} aria-pressed={cpfShown} aria-label={cpfShown ? "Ocultar CPF" : "Revelar CPF (fica registrado na auditoria)"} title={cpfShown ? "Ocultar CPF" : "Revelar CPF · registrado na auditoria"}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">
+                    <Icon n={cpfShown ? "EyeOff" : "Eye"} size={13} />
+                  </button>
+                </dd>
+              </div>
+              <div className="inline-flex items-center gap-1.5">
+                <dt className="text-faint">Tel.</dt>
+                <dd className="inline-flex items-center gap-1">
+                  <span className="font-mono tnum">{p.phone}</span>
+                  <button type="button" onClick={onCopyPhone} aria-label="Copiar telefone" title="Copiar telefone"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">
+                    <Icon n="Copy" size={13} />
+                  </button>
+                </dd>
+              </div>
+              <div className="inline-flex min-w-0 items-center gap-1.5">
+                <dt className="text-faint">Carteirinha</dt>
+                <dd className="truncate font-mono tnum">{p.cardMasked}</dd>
+              </div>
+            </dl>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Chip tone="bad" icon="TriangleAlert">Alergia: {p.allergies.join(", ")}</Chip>
+              <Chip tone="muted" icon="Sunrise">Prefere manhã</Chip>
+              <Chip tone="ai" icon="MessageCircle">WhatsApp ativo</Chip>
+              <Chip tone="muted" icon="ShieldCheck">Termo LGPD assinado</Chip>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5 lg:justify-end">
+          <Btn k="A" icon="CalendarPlus" primary onClick={() => onAction("a")}>Agendar</Btn>
+          <Btn k="M" icon="MessageCircle" onClick={() => onAction("m")}>Mensagem</Btn>
+          <Btn k="U" icon="Paperclip" onClick={() => onAction("u")}>Anexar exame</Btn>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 divide-x divide-fg/[0.08] border-t border-fg/[0.08] bg-sunken/60">
+        <Stat label="LTV" value={brl(p.ltv)} tone="ok" sub="desde mar/2023 · 11 consultas" />
+        <Stat label="Consultas no ano" value={p.yearVisits} sub="4 com a Dra. Helena · 1 Dr. Menezes" />
+        <Stat label="No-show" value={ns} unit="%" tone={ns > 15 ? "warn" : undefined} sub={`${p.noShow.count} falta em ${p.noShow.total} · 03/03/2026`} />
+      </div>
+    </section>
+  );
+}
+
+/* ───────────────────────── pathways ───────────────────────── */
+function StepDot({ state, tone }) {
+  if (state === "done") return <span className={cx("inline-flex h-5 w-5 items-center justify-center rounded-full text-bg", DOT.ok)}><Icon n="Check" size={12} sw={2.5} /></span>;
+  if (state === "pending") return <span className={cx("inline-flex h-5 w-5 items-center justify-center rounded-full border-2 bg-surface", tone === "warn" ? "border-warn" : "border-ai")}><Pulse tone={tone === "warn" ? "warn" : "ai"} /></span>;
+  return <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-fg/30 bg-surface"><span className="h-1.5 w-1.5 rounded-full bg-faint" /></span>;
+}
+
+function Stepper({ steps, tone = "ai", onOpenDoc, compact }) {
+  return (
+    <ol className={cx("grid gap-3", compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4")} aria-label="Etapas da trilha">
+      {steps.map((s, i) => (
+        <li key={s.id} className="relative flex items-start gap-2.5">
+          {!compact && i < steps.length - 1 && <span className="pointer-events-none absolute left-[9px] top-6 h-[calc(100%-6px)] w-px bg-fg/[0.1] sm:hidden xl:left-7 xl:top-[9px] xl:block xl:h-px xl:w-[calc(100%-40px)]" aria-hidden="true" />}
+          {compact && i < steps.length - 1 && <span className="pointer-events-none absolute left-[9px] top-6 h-[calc(100%-6px)] w-px bg-fg/[0.1]" aria-hidden="true" />}
+          <StepDot state={s.state} tone={tone} />
+          <div className="relative min-w-0 flex-1 rounded-lg bg-surface pr-1">
+            <span className={cx("block text-[13px] leading-snug", s.state === "future" ? "text-muted" : "font-medium")}>{s.label}</span>
+            <span className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted">
+              {s.date && <span className="font-mono tnum">{dm(s.date)}</span>}
+              {s.state === "done" && <span className="text-ok">concluído</span>}
+              {s.state === "pending" && <span className={TEXT[tone === "warn" ? "warn" : "ai"]}>pendente</span>}
+              {s.hint && <span className="text-faint">· {s.hint}</span>}
+              {s.docId && onOpenDoc && <button type="button" onClick={() => onOpenDoc(s.docId)} className="inline-flex items-center gap-0.5 rounded px-0.5 text-ai hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40"><Icon n="FileText" size={11} />ver</button>}
+            </span>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+const CONTACT_LABEL = {
+  idle: null,
+  sending: "Copilot está enviando a mensagem…",
+  sent: "Copilot enviou mensagem pelo WhatsApp",
+  chosen: "Camila escolheu Ter 14/10 · 09:30",
+};
+
+function PathwayHero({ pw, contact, slots, onContact, onPickSlot, onOpenDoc }) {
+  const done = contact.state === "chosen";
+  const steps = done ? pw.steps.map((s) => (s.id === "st3" ? { ...s, state: "done", date: "2026-10-09", hint: "Ter 14/10 · 09:30 confirmado" } : s)) : pw.steps;
+  const live = contact.state === "sending" || contact.state === "sent";
+  return (
+    <section aria-label={pw.title} aria-busy={live} className={cx("anim-enter relative overflow-hidden rounded-2xl border bg-surface p-4 transition-shadow duration-700 sm:p-5",
+      done ? "border-ok/30 shadow-[0_24px_60px_-28px_rgb(var(--ok)/0.55)]" : "border-ai/25 shadow-[0_24px_60px_-28px_rgb(var(--ai)/0.55)]")}>
+      <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full blur-3xl" style={{ background: done ? "rgb(var(--ok) / .14)" : "rgb(var(--ai) / .16)" }} />
+      <div className="relative flex flex-wrap items-center gap-2">
+        <span className={cx("inline-flex h-6 w-6 items-center justify-center rounded-md", done ? "bg-ok/10 text-ok" : "bg-ai/10 text-ai")}><Icon n="Route" size={14} sw={2} /></span>
+        <h2 className="text-[13px] font-semibold">{pw.title}</h2>
+        <DocTag id={pw.doc} />
+        <span className={cx("ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium", done ? "text-ok" : "text-ai")}>
+          {!done && <Pulse tone="ai" live={live} />}{done ? "Retorno agendado" : "Retorno pendente"}
+        </span>
+      </div>
+
+      <div className={cx("relative mt-3 flex items-start gap-2.5 rounded-xl border px-3 py-2.5", done ? "border-ok/20 bg-ok/[0.06]" : "border-ai/20 bg-ai/[0.06]")} role="status">
+        <Icon n={done ? "CircleCheck" : "Sparkles"} size={16} className={cx("mt-0.5 shrink-0", done ? "text-ok" : "text-ai")} />
+        <p className="text-[13px] leading-snug">
+          {done
+            ? <>Retorno para entrega do laudo confirmado para <span className="font-mono font-medium tnum">Ter 14/10 · 09:30</span> com a Dra. Helena. A paciente recebeu o convite e a confirmação pelo WhatsApp.</>
+            : <>{pw.alert}. <span className="text-muted">Laudo anatomopatológico já está na ficha desde <span className="font-mono tnum">06/10</span>; o prazo ideal de entrega termina em <span className="font-mono tnum">16/10</span>.</span></>}
+        </p>
+      </div>
+
+      <div className="relative mt-4">
+        <Stepper steps={steps} tone="ai" onOpenDoc={onOpenDoc} />
+      </div>
+
+      {!done && (
+        <div className="relative mt-4 flex flex-col gap-2.5">
+          <p className="flex items-center gap-1.5 text-[12px] text-ai"><Icon n="Sparkles" size={13} />Horários sugeridos na agenda da Dra. Helena, pela preferência de manhã da paciente</p>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Horários sugeridos">
+            {slots.map((s, i) => (
+              <button key={s.id} type="button" onClick={() => onPickSlot(i)} aria-pressed={contact.slot === i} title={s.hint}
+                className={cx("inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+                  contact.slot === i ? "border-ai/40 bg-ai/[0.06] text-fg" : "border-fg/[0.1] bg-surface text-fg/80 hover:bg-sunken")}>
+                <span className="font-mono tnum">{s.label}</span>
+                {contact.slot === i && <Icon n="Check" size={13} className="text-ai" />}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Btn k="D" icon={contact.state === "sending" ? "LoaderCircle" : "Send"} primary busy={live} onClick={onContact} aria-describedby="contact-status">
+              {contact.state === "idle" ? "Disparar contato agora" : contact.state === "sending" ? "Enviando…" : "Aguardando resposta"}
+            </Btn>
+            <span id="contact-status" className={cx("inline-flex min-h-[20px] items-center gap-1.5 text-[12px]", live ? "text-ai" : "text-muted")} aria-live="polite">
+              {contact.state === "idle" && <><Icon n="MessageCircle" size={13} />Copilot oferece os 3 horários pelo WhatsApp e agenda a resposta sozinho</>}
+              {contact.state === "sending" && <><Pulse tone="ai" />Enviando pelo WhatsApp…</>}
+              {contact.state === "sent" && <><Icon n="CheckCheck" size={13} />{CONTACT_LABEL.sent} · <span className="font-mono tnum">{hm(contact.sentAt)}</span> · paciente digitando…</>}
+            </span>
+          </div>
+        </div>
+      )}
+      {done && (
+        <div className="relative mt-4 flex flex-wrap items-center gap-2 text-[12px] text-muted">
+          <Chip tone="ok" icon="CalendarCheck">Ter 14/10 · 09:30 · Dra. Helena · Sala 1</Chip>
+          <Chip tone="ai" icon="CheckCheck">{CONTACT_LABEL.chosen} às <span className="font-mono tnum">{hm(contact.chosenAt)}</span></Chip>
+          <span className="text-faint">Tarefa RETORNO_A_AGENDAR resolvida pelo Copilot</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SmallPathway({ pw, state, onAction, onOpenDoc }) {
+  const tone = state === "done" ? "ok" : pw.tone;
+  const statusLabel = state === "done" ? (pw.tone === "warn" ? "Contato feito" : "Lembrete ativo") : pw.status;
+  return (
+    <li className="flex flex-col gap-2.5 py-3 first:pt-0 last:pb-0">
+      <div className="flex items-start gap-2">
+        <span className={cx("mt-1 h-2 w-2 shrink-0 rounded-full", DOT[tone])} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-[13px] font-medium leading-snug">{pw.title}</span>
+            <span className={cx("text-[12px] font-medium", TEXT[tone])}>{statusLabel}</span>
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-muted"><DocTag id={pw.doc} /><span>{pw.detail}</span></div>
+        </div>
+      </div>
+      <div className="pl-4"><Stepper steps={pw.steps} tone={pw.tone} compact onOpenDoc={onOpenDoc} /></div>
+      <div className="flex flex-wrap items-center gap-2 pl-4">
+        {state === "done"
+          ? <span className="inline-flex items-center gap-1.5 text-[12px] text-ok"><Icon n="CheckCheck" size={13} />{pw.action.done}</span>
+          : <Btn icon={state === "sending" ? "LoaderCircle" : pw.action.icon} busy={state === "sending"} primary={pw.tone === "warn"} onClick={() => onAction(pw.id)}>{state === "sending" ? "Enviando…" : pw.action.label}</Btn>}
+      </div>
+    </li>
+  );
+}
+
+/* ───────────────────────── tabs: content ───────────────────────── */
+const STATUS = {
+  now: ["ok", "Em atendimento", "DoorOpen"],
+  done: ["muted", "Concluída", "CircleCheck"],
+  noshow: ["bad", "Faltou", "CalendarX2"],
+  scheduled: ["ai", "Agendada", "CalendarCheck"],
+};
+
+function ConsultList({ items, limit }) {
+  const list = limit ? items.slice(0, limit) : items;
+  return (
+    <ol className="flex flex-col divide-y divide-fg/[0.06]" aria-label="Histórico de consultas">
+      {list.map((a) => {
+        const [tone, label, icon] = STATUS[a.status];
+        return (
+          <li key={a.id} className="flex items-start gap-3 py-2.5">
+            <span className="flex w-[4.5rem] shrink-0 flex-col font-mono text-[12px] leading-tight text-muted tnum">
+              <span className={cx(a.status === "now" ? "font-medium text-fg" : "")}>{dmy(a.date).slice(0, 5)}<span className="text-faint">/{a.date.slice(2, 4)}</span></span>
+              <span className="text-faint">{hm(a.time)}</span>
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate text-[13px] font-medium">{a.type}</span>
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5"><DocTag id={a.doc} /><Payer payer={a.payer} /></span>
+            </div>
+            <Chip tone={tone} icon={icon} className="shrink-0">{label}</Chip>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function Thumb({ exam, size = 44 }) {
+  const base = "flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-fg/[0.08] bg-sunken";
+  const s = { width: size, height: size };
+  if (exam.kind === "derma") return <span className={base} style={s} aria-hidden="true"><span className="h-full w-full" style={{ background: "radial-gradient(circle at 55% 50%, rgb(var(--fg)/.75) 0 18%, rgb(var(--warn)/.55) 19% 30%, rgb(var(--warn)/.2) 31% 45%, transparent 46%), linear-gradient(135deg, rgb(var(--warn)/.25), rgb(var(--warn)/.08))" }} /></span>;
+  if (exam.kind === "map") return <span className={base} style={s} aria-hidden="true"><span className="h-full w-full" style={{ background: "radial-gradient(circle at 30% 35%, rgb(var(--fg)/.5) 0 5%, transparent 6%), radial-gradient(circle at 62% 55%, rgb(var(--fg)/.5) 0 4%, transparent 5%), radial-gradient(circle at 45% 75%, rgb(var(--fg)/.5) 0 3%, transparent 4%), linear-gradient(160deg, rgb(var(--warn)/.2), rgb(var(--warn)/.06))" }} /></span>;
+  if (exam.kind === "ecg") return <span className={base} style={s} aria-hidden="true"><svg viewBox="0 0 44 44" width={size} height={size}><polyline points="0,24 8,24 11,22 14,24 17,24 19,10 21,34 23,24 28,24 31,20 34,24 44,24" fill="none" stroke="rgb(var(--ok))" strokeWidth="1.6" strokeLinejoin="round" /></svg></span>;
+  if (exam.kind === "lab") return <span className={cx(base, "text-muted")} style={s} aria-hidden="true"><Icon n="TestTubes" size={20} /></span>;
+  return <span className={cx(base, "text-muted")} style={s} aria-hidden="true"><Icon n="FileText" size={20} /></span>;
+}
+
+function ExamTimeline({ items, limit, onOpen, selectedId }) {
+  const list = limit ? items.slice(0, limit) : items;
+  return (
+    <ol className="relative flex flex-col" aria-label="Exames anexados">
+      {list.map((e, i) => (
+        <li key={e.id} className="relative flex gap-3 pb-3 last:pb-0">
+          {i < list.length - 1 && <span className="absolute left-[26px] top-[52px] h-[calc(100%-44px)] w-px bg-fg/[0.08]" aria-hidden="true" />}
+          <button type="button" data-exam={e.id} onClick={() => onOpen(e.id)} aria-current={selectedId === e.id ? "true" : undefined} aria-label={`Abrir ${e.title}, ${dmy(e.date)}`}
+            className="group flex min-w-0 flex-1 items-start gap-3 rounded-xl border border-transparent p-1 text-left transition-[background-color,border-color] hover:border-fg/[0.08] hover:bg-sunken/70 focus-visible:border-ai/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ai/15">
+            <Thumb exam={e} />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="flex items-center justify-between gap-2">
+                <span className="truncate text-[13px] font-medium">{e.title}</span>
+                <span className="shrink-0 font-mono text-[12px] text-muted tnum">{dmy(e.date)}</span>
+              </span>
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted">
+                <Chip tone={e.flagged ? "warn" : "muted"} icon={e.flagged ? "TriangleAlert" : undefined}>{e.typeLabel}{e.flagged ? " · valor alterado" : ""}</Chip>
+                <span className="truncate">{e.source}</span>
+                <span className="font-mono text-faint tnum">{e.size}</span>
+              </span>
+            </span>
+            <span className="mt-1 hidden shrink-0 items-center gap-1 text-[12px] text-faint group-hover:text-fg sm:inline-flex"><Icon n="Maximize2" size={12} />visualizar</span>
+          </button>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Chat({ messages, onSend, composerRef }) {
+  const [text, setText] = useState("");
+  const endRef = useRef(null);
+  useEffect(() => { endRef.current && endRef.current.scrollIntoView({ block: "nearest" }); }, [messages.length]);
+  const who = { copilot: ["Copilot", "ai", "Sparkles"], staff: ["Carla · recepção", "fg", "UserRound"], patient: ["Camila", "muted", null] };
+  let lastDate = null;
+  const submit = (e) => { e.preventDefault(); if (!text.trim()) return; onSend(text.trim()); setText(""); };
+  return (
+    <div className="flex flex-col gap-3">
+      <ol className="flex max-h-[52vh] flex-col gap-2 overflow-y-auto pr-1" aria-label="Mensagens do WhatsApp">
+        {messages.map((m) => {
+          const head = m.date !== lastDate ? (lastDate = m.date) : null;
+          const [name, tone, icon] = who[m.from];
+          const mine = m.from !== "patient";
+          return (
+            <React.Fragment key={m.id}>
+              {head && <li className="my-1 text-center font-mono text-[11px] text-faint tnum" role="presentation">{dmy(head)}</li>}
+              <li className={cx("flex max-w-[85%] flex-col gap-0.5", mine ? "self-end items-end" : "self-start items-start")}>
+                <span className={cx("inline-flex items-center gap-1 text-[11px] font-medium", TEXT[tone])}>{icon && <Icon n={icon} size={11} />}{name} · <span className="font-mono tnum">{hm(m.t)}</span></span>
+                <p className={cx("rounded-xl px-3 py-2 text-[13px] leading-snug", mine ? "rounded-tr-sm border border-ai/20 bg-ai/[0.06]" : "rounded-tl-sm border border-fg/[0.08] bg-sunken")}>{m.text}</p>
+              </li>
+            </React.Fragment>
+          );
+        })}
+        <li ref={endRef} aria-hidden="true" />
+      </ol>
+      <form onSubmit={submit} className="flex items-center gap-2 rounded-xl border border-fg/[0.1] bg-surface p-1.5 focus-within:border-ai/50 focus-within:ring-[3px] focus-within:ring-ai/15">
+        <Icon n="MessageCircle" size={15} className="ml-1.5 text-muted" />
+        <input ref={composerRef} value={text} onChange={(e) => setText(e.target.value)} placeholder="Mensagem para Camila pelo WhatsApp…" aria-label="Mensagem para a paciente" className="h-8 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint" />
+        <Btn icon="Send" primary type="submit">Enviar</Btn>
+      </form>
+    </div>
+  );
+}
+
+function Panel({ title, icon, right, children, className = "" }) {
+  return (
+    <section aria-label={title} className={cx("rounded-2xl border border-fg/[0.08] bg-surface p-4", className)}>
+      <div className="mb-2.5 flex items-center gap-2"><Icon n={icon} size={15} className="text-muted" /><h2 className="text-[13px] font-semibold">{title}</h2>{right && <span className="ml-auto text-[12px] text-faint">{right}</span>}</div>
+      {children}
+    </section>
+  );
+}
+
+function Demographics({ cpfShown }) {
+  const p = PATIENT;
+  const rows = [
+    ["Nascimento", <><span className="font-mono tnum">{dmy(p.birth)}</span> · {p.age} anos</>],
+    ["Sexo", p.sex],
+    ["CPF", <span className="font-mono tnum">{cpfShown ? p.cpf : p.cpfMasked}</span>],
+    ["Telefone", <span className="font-mono tnum">{p.phone}</span>],
+    ["E-mail", <span className="break-all">{p.email}</span>],
+    ["Endereço", p.address],
+    ["Convênio", <>{p.payer} · <span className="font-mono tnum">{p.cardMasked}</span></>],
+    ["Emergência", <span className="font-mono tnum">{p.emergency}</span>],
+    ["Alergias", <span className="font-medium text-bad">{p.allergies.join(", ")}</span>],
+    ["Paciente desde", <span className="font-mono tnum">{dmy(p.since)}</span>],
+  ];
+  return (
+    <dl className="flex flex-col divide-y divide-fg/[0.06]">
+      {rows.map(([k, v]) => (
+        <div key={k} className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 py-2 text-[13px]">
+          <dt className="text-faint">{k}</dt>
+          <dd className="min-w-0 leading-snug">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/* ───────────────────────── documents (mock renders) ───────────────────────── */
+function Paper({ children }) {
+  return <div className="rounded-xl border border-fg/[0.08] bg-surface p-4 sm:p-6">{children}</div>;
+}
+function PaperHead({ org, sub, n, date }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-fg/[0.08] pb-3">
+      <div><div className="text-[14px] font-semibold">{org}</div><div className="text-[12px] text-muted">{sub}</div></div>
+      <div className="text-right font-mono text-[12px] text-muted tnum"><div>Nº {n}</div><div>{date}</div></div>
+    </div>
+  );
+}
+function Fields({ rows }) {
+  return (
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 py-3 text-[13px] sm:grid-cols-2">
+      {rows.map(([k, v]) => <div key={k} className="flex gap-2"><dt className="w-28 shrink-0 text-faint">{k}</dt><dd className="min-w-0">{v}</dd></div>)}
+    </dl>
+  );
+}
+
+function LaudoDoc() {
+  return (
+    <Paper>
+      <PaperHead org="Laboratório de Patologia Diagnóstica" sub="Anatomia patológica · CRM-SP 000000 · dados fictícios" n="AP-2026-04817" date="06/10/2026" />
+      <Fields rows={[["Paciente", "Camila Duarte · 34 anos"], ["Solicitante", "Dra. Helena Prado · Dermatologia"], ["Material", "Pele · dorso (shave)"], ["Coleta", <span className="font-mono tnum">25/09/2026</span>], ["Hipótese", "Lesão melanocítica, descartar atipia"], ["Liberação", <span className="font-mono tnum">06/10/2026 · 16:20</span>]]} />
+      {[
+        ["Macroscopia", "Fragmento de pele de 0,6 × 0,4 × 0,2 cm, superfície com lesão enegrecida de 0,4 cm, bordas regulares. Todo incluído."],
+        ["Microscopia", "Proliferação de melanócitos em ninhos na junção dermoepidérmica e na derme papilar, com maturação em profundidade. Ausência de atipia citológica, mitoses ou infiltrado inflamatório significativo."],
+      ].map(([h, t]) => <section key={h} className="border-t border-fg/[0.06] py-3"><h3 className="text-[11px] font-medium uppercase tracking-[0.06em] text-faint">{h}</h3><p className="mt-1 text-[13px] leading-relaxed">{t}</p></section>)}
+      <section className="rounded-lg border border-ok/20 bg-ok/[0.06] p-3">
+        <h3 className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-ok"><Icon n="CircleCheck" size={12} />Conclusão</h3>
+        <p className="mt-1 text-[14px] font-medium leading-snug">Nevo melanocítico composto, sem atipias. Margens cirúrgicas livres.</p>
+      </section>
+      <div className="mt-3 flex items-center justify-between text-[12px] text-muted"><span>Dr. Exemplo Patologista · assinatura digital</span><span className="font-mono tnum">ICP-Brasil · válida</span></div>
+    </Paper>
+  );
+}
+
+const LAB_ROWS = [
+  ["Hemoglobina", "13,4", "g/dL", "12,0 – 15,5", false],
+  ["Leucócitos", "6.200", "/mm³", "4.000 – 10.000", false],
+  ["Plaquetas", "245.000", "/mm³", "150.000 – 450.000", false],
+  ["Glicemia de jejum", "89", "mg/dL", "70 – 99", false],
+  ["Colesterol total", "212", "mg/dL", "< 190", true],
+  ["LDL", "158", "mg/dL", "< 130", true],
+  ["HDL", "54", "mg/dL", "> 40", false],
+  ["Triglicerídeos", "98", "mg/dL", "< 150", false],
+  ["TSH", "2,1", "µUI/mL", "0,4 – 4,0", false],
+];
+function LabDoc() {
+  return (
+    <Paper>
+      <PaperHead org="Laboratório São Lucas" sub="Análises clínicas · dados fictícios" n="LAB-2026-11903" date="02/03/2026" />
+      <Fields rows={[["Paciente", "Camila Duarte · 34 anos"], ["Solicitante", "Dra. Beatriz Okada · Cardiologia"], ["Coleta", <span className="font-mono tnum">02/03/2026 · 07:40</span>], ["Jejum", "12 h"]]} />
+      <table className="w-full border-collapse text-[13px]">
+        <thead><tr className="text-left text-[11px] font-medium uppercase tracking-[0.06em] text-faint"><th className="py-1.5 pr-2 font-medium">Analito</th><th className="py-1.5 pr-2 text-right font-medium">Resultado</th><th className="hidden py-1.5 pr-2 font-medium sm:table-cell">Unidade</th><th className="py-1.5 font-medium">Referência</th></tr></thead>
+        <tbody className="divide-y divide-fg/[0.06]">
+          {LAB_ROWS.map(([n, v, u, ref, flag]) => (
+            <tr key={n} className={flag ? "bg-warn/[0.06]" : ""}>
+              <td className="py-2 pr-2">{n}</td>
+              <td className={cx("py-2 pr-2 text-right font-mono font-medium tnum", flag ? "text-warn" : "")}>{v}{flag && <span className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-medium uppercase"><Icon n="ArrowUp" size={11} sw={2.5} />alto</span>}</td>
+              <td className="hidden py-2 pr-2 font-mono text-muted tnum sm:table-cell">{u}</td>
+              <td className="py-2 font-mono text-muted tnum">{ref}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-3 flex items-center gap-1.5 text-[12px] text-warn"><Icon n="TriangleAlert" size={13} />2 valores acima da referência · Colesterol total e LDL</p>
+    </Paper>
+  );
+}
+
+function DermaDoc({ exam }) {
+  const map = exam.kind === "map";
+  return (
+    <Paper>
+      <PaperHead org={CLINIC} sub={map ? "Mapeamento corporal total · dermatoscopia digital" : "Dermatoscopia digital · aumento 20×"} n={map ? "IMG-2026-0612" : "IMG-2026-0925"} date={dmy(exam.date)} />
+      <div className="grid gap-4 py-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="relative aspect-square w-full max-w-[420px] overflow-hidden rounded-xl border border-fg/[0.08]" role="img" aria-label={map ? "Mapa corporal com três nevos marcados" : "Imagem dermatoscópica de lesão pigmentada de 4 mm, bordas regulares"}>
+          {map
+            ? <div className="h-full w-full" style={{ background: "radial-gradient(circle at 30% 35%, rgb(var(--fg)/.55) 0 2.2%, rgb(var(--ok)/.6) 2.4% 3.4%, transparent 3.6%), radial-gradient(circle at 62% 55%, rgb(var(--fg)/.55) 0 1.8%, rgb(var(--ok)/.6) 2% 3%, transparent 3.2%), radial-gradient(circle at 45% 78%, rgb(var(--fg)/.55) 0 1.4%, rgb(var(--ok)/.6) 1.6% 2.6%, transparent 2.8%), radial-gradient(ellipse 28% 42% at 50% 48%, rgb(var(--warn)/.22), transparent 70%), linear-gradient(160deg, rgb(var(--warn)/.14), rgb(var(--warn)/.04))" }} />
+            : <div className="h-full w-full" style={{ background: "radial-gradient(circle at 54% 50%, rgb(var(--fg)/.82) 0 9%, rgb(var(--fg)/.6) 10% 15%, rgb(var(--warn)/.6) 16% 22%, rgb(var(--warn)/.3) 23% 27%, transparent 29%), repeating-radial-gradient(circle at 54% 50%, transparent 0 6px, rgb(var(--fg)/.05) 6px 7px), linear-gradient(135deg, rgb(var(--warn)/.28), rgb(var(--warn)/.1))" }} />}
+          <span className="absolute bottom-2 left-2 inline-flex items-center gap-1.5 rounded-md bg-fg/80 px-1.5 py-0.5 font-mono text-[11px] text-bg tnum"><span className="inline-block h-px w-6 bg-bg" />{map ? "escala 1:8" : "1 mm"}</span>
+          <span className="absolute right-2 top-2 rounded-md bg-fg/80 px-1.5 py-0.5 font-mono text-[11px] text-bg tnum">{map ? "3 nevos" : "20× · dorso"}</span>
+        </div>
+        <dl className="flex flex-col gap-2 text-[13px]">
+          {(map
+            ? [["Lesões mapeadas", "3 · todas estáveis"], ["Comparação", "vs. jun/2025 · sem novas"], ["Risco", "baixo"], ["Próxima", "jun/2027"]]
+            : [["Diâmetro", "4 mm"], ["Assimetria", "ausente"], ["Bordas", "regulares"], ["Cores", "2 (castanho, preto)"], ["Rede pigmentar", "típica"], ["Conduta", "shave + AP (25/09)"]]
+          ).map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-fg/[0.06] pb-1.5"><dt className="text-faint">{k}</dt><dd className="text-right font-medium">{v}</dd></div>)}
+        </dl>
+      </div>
+    </Paper>
+  );
+}
+
+function ecgPath(width, beats) {
+  const pts = [];
+  const base = 60, step = width / beats;
+  for (let b = 0; b < beats; b++) {
+    const x = b * step;
+    const seg = [[0, base], [step * 0.12, base], [step * 0.17, base - 5], [step * 0.22, base], [step * 0.30, base], [step * 0.33, base + 3], [step * 0.36, base - 38], [step * 0.39, base + 12], [step * 0.42, base], [step * 0.55, base], [step * 0.62, base - 9], [step * 0.70, base], [step, base]];
+    seg.forEach(([dx, y]) => pts.push(`${(x + dx).toFixed(1)},${y}`));
+  }
+  return pts.join(" ");
+}
+function EcgDoc() {
+  const path = useMemo(() => ecgPath(880, 6), []);
+  return (
+    <Paper>
+      <PaperHead org={CLINIC} sub="Eletrocardiograma de repouso · 12 derivações · 25 mm/s · 10 mm/mV" n="ECG-2026-0320" date="20/03/2026" />
+      <div className="overflow-x-auto rounded-xl border border-fg/[0.08]">
+        <svg viewBox="0 0 880 120" width="880" height="120" className="block" role="img" aria-label="Traçado DII: ritmo sinusal regular, 68 batimentos por minuto">
+          <defs>
+            <pattern id="ecg-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="rgb(var(--bad) / .18)" strokeWidth="1" /></pattern>
+            <pattern id="ecg-grid-s" width="4" height="4" patternUnits="userSpaceOnUse"><path d="M4 0H0V4" fill="none" stroke="rgb(var(--bad) / .07)" strokeWidth="0.5" /></pattern>
+          </defs>
+          <rect width="880" height="120" fill="url(#ecg-grid-s)" /><rect width="880" height="120" fill="url(#ecg-grid)" />
+          <polyline points={path} fill="none" stroke="rgb(var(--fg))" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+          <text x="8" y="16" fontFamily="var(--font-data)" fontSize="11" fill="rgb(var(--muted))">DII</text>
+        </svg>
+      </div>
+      <Fields rows={[["FC", <span className="font-mono tnum">68 bpm</span>], ["Ritmo", "sinusal regular"], ["PR", <span className="font-mono tnum">156 ms</span>], ["QRS", <span className="font-mono tnum">88 ms</span>], ["QTc", <span className="font-mono tnum">402 ms</span>], ["Eixo", <span className="font-mono tnum">+45°</span>]]} />
+      <p className="flex items-center gap-1.5 text-[13px]"><Icon n="CircleCheck" size={14} className="text-ok" />Dentro dos limites da normalidade. <span className="text-muted">Dra. Beatriz Okada · CRM-SP 000000</span></p>
+    </Paper>
+  );
+}
+
+function ExamPreview({ exam, index, total, onClose, onPrev, onNext, onShare }) {
+  const ref = useRef(null);
+  useEffect(() => { ref.current && ref.current.focus(); }, [exam.id]);
+  const onKey = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); onClose(); }
+    else if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); onNext(); }
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); onPrev(); }
+  };
+  const Body = { laudo: LaudoDoc, lab: LabDoc, derma: DermaDoc, map: DermaDoc, ecg: EcgDoc }[exam.kind];
+  return (
+    <Overlay onClose={onClose} label={`Pré-visualização: ${exam.title}`} align="top" wide>
+      <div ref={ref} tabIndex={-1} onKeyDown={onKey} className="outline-none">
+        <div className="flex items-start gap-3 border-b border-fg/[0.08] p-4">
+          <Thumb exam={exam} size={40} />
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-[15px] font-semibold">{exam.title}</h2>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-muted">
+              <span className="font-mono tnum">{dmy(exam.date)}</span><span>· {exam.source}</span><DocTag id={exam.doc} /><span className="font-mono text-faint tnum">{exam.file} · {exam.size}</span>
+            </p>
+          </div>
+          <span className="hidden shrink-0 items-center gap-1 font-mono text-[12px] text-muted tnum sm:inline-flex"><Kbd>←</Kbd><Kbd>→</Kbd> {index + 1}/{total}</span>
+          <button type="button" onClick={onClose} aria-label="Fechar" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40"><Icon n="X" size={15} /></button>
+        </div>
+        <div key={exam.id} className="anim-enter max-h-[62vh] overflow-y-auto bg-sunken/60 p-3 sm:p-4">
+          <Body exam={exam} />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-fg/[0.08] p-3">
+          <Btn icon="ChevronLeft" onClick={onPrev} aria-label="Exame anterior">Anterior</Btn>
+          <Btn icon="ChevronRight" onClick={onNext} aria-label="Próximo exame">Próximo</Btn>
+          <span className="ml-auto flex flex-wrap gap-2">
+            <Btn icon="Download" onClick={() => onShare("download")}>Baixar</Btn>
+            <Btn icon="Send" primary onClick={() => onShare("send")}>Enviar à paciente</Btn>
+          </span>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+/* ───────────────────────── overlays ───────────────────────── */
+function Overlay({ onClose, children, label, align = "top", wide }) {
+  return (
+    <div role="dialog" aria-modal="true" aria-label={label} className={cx("fixed inset-0 z-50 flex justify-center bg-black/40 px-4 backdrop-blur-[2px]", align === "top" ? "items-start pt-[12vh]" : "items-center")} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={cx("anim-pop w-full overflow-hidden rounded-2xl border border-fg/[0.1] bg-surface shadow-[0_32px_80px_-20px_rgb(0_0_0/0.35)]", wide ? "max-w-[920px]" : "max-w-[560px]")}>{children}</div>
+    </div>
+  );
+}
+
+function CommandPalette({ items, onClose }) {
+  const [q, setQ] = useState("");
+  const [idx, setIdx] = useState(0);
+  const listRef = useRef(null);
+  const filtered = useMemo(() => {
+    const n = norm(q.trim());
+    return n ? items.filter((it) => norm(it.label + " " + (it.hint || "") + " " + it.group).includes(n)) : items;
+  }, [q, items]);
+  useEffect(() => setIdx(0), [q]);
+  useEffect(() => { const el = listRef.current && listRef.current.querySelector(`[data-i="${idx}"]`); el && el.scrollIntoView({ block: "nearest" }); }, [idx]);
+  const run = (it) => { onClose(); it && it.run(); };
+  const onKey = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, filtered.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); run(filtered[idx]); }
+    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+  };
+  let lastGroup = null;
+  return (
+    <Overlay onClose={onClose} label="Busca rápida">
+      <div className="flex items-center gap-2.5 border-b border-fg/[0.08] px-4">
+        <Icon n="Search" size={16} className="text-muted" />
+        <input id="cmdk-input" autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="Paciente, exame ou ação…" aria-label="Buscar"
+          className="h-12 flex-1 bg-transparent text-[15px] outline-none placeholder:text-faint" />
+        <Kbd>Esc</Kbd>
+      </div>
+      <ul ref={listRef} className="max-h-[52vh] overflow-y-auto p-1.5" role="listbox" aria-label="Resultados">
+        {filtered.length === 0 && <li className="px-3 py-8 text-center text-[13px] text-muted">Nada encontrado para “{q}”.</li>}
+        {filtered.map((it, i) => {
+          const head = it.group !== lastGroup ? (lastGroup = it.group) : null;
+          return (
+            <React.Fragment key={it.id}>
+              {head && <li className="px-2.5 pb-1 pt-2.5 text-[11px] font-medium uppercase tracking-[0.06em] text-faint" role="presentation">{head}</li>}
+              <li data-i={i} role="option" aria-selected={i === idx} onMouseMove={() => setIdx(i)} onClick={() => run(it)}
+                className={cx("flex cursor-default items-center gap-3 rounded-lg px-2.5 py-2", i === idx ? "bg-sunken" : "")}>
+                <span className={cx("inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-fg/[0.08]", it.tone ? TEXT[it.tone] : "text-muted")}><Icon n={it.icon} size={14} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-medium">{it.label}</span>
+                  {it.hint && <span className="block truncate text-[12px] text-muted">{it.hint}</span>}
+                </span>
+                {it.kbd && <span className="flex gap-0.5">{it.kbd.map((k) => <Kbd key={k}>{k}</Kbd>)}</span>}
+                {i === idx && <Icon n="CornerDownLeft" size={14} className="text-faint" />}
+              </li>
+            </React.Fragment>
+          );
+        })}
+      </ul>
+      <div className="flex items-center gap-4 border-t border-fg/[0.08] px-4 py-2 text-[12px] text-faint">
+        <span className="inline-flex items-center gap-1"><Kbd>↑</Kbd><Kbd>↓</Kbd> navegar</span>
+        <span className="inline-flex items-center gap-1"><Kbd>↵</Kbd> abrir</span>
+        <span className="ml-auto">{filtered.length} resultados</span>
+      </div>
+    </Overlay>
+  );
+}
+
+function ScheduleDialog({ onClose, onConfirm }) {
+  const [sel, setSel] = useState(0);
+  const [notify, setNotify] = useState(true);
+  const ref = useRef(null);
+  useEffect(() => { ref.current && ref.current.focus(); }, []);
+  const onKey = (e) => {
+    if (["1", "2", "3"].includes(e.key)) { setSel(Number(e.key) - 1); e.preventDefault(); }
+    else if (e.key === "ArrowDown") { setSel((s) => Math.min(s + 1, 2)); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { setSel((s) => Math.max(s - 1, 0)); e.preventDefault(); }
+    else if (e.key === "Enter") { e.preventDefault(); onConfirm(sel, notify); }
+    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+  };
+  return (
+    <Overlay onClose={onClose} label="Agendar retorno" align="center">
+      <div ref={ref} tabIndex={-1} onKeyDown={onKey} className="outline-none">
+        <div className="flex items-start gap-3 border-b border-fg/[0.08] p-4">
+          <Avatar name={PATIENT.name} size={36} />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[15px] font-semibold">Agendar retorno de {first(PATIENT.name)}</h2>
+            <p className="text-[12px] text-muted">Entrega de laudo · {DOCS.helena.name} · Particular · <span className="font-mono tnum">{brl(380)}</span></p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar" className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-sunken"><Icon n="X" size={15} /></button>
+        </div>
+        <div className="p-2">
+          <p className="flex items-center gap-1.5 px-2 pb-1.5 pt-1 text-[12px] text-ai"><Icon n="Sparkles" size={13} />Sugestões do Copilot pelo histórico e preferência de manhã</p>
+          {SLOTS.map((s, i) => (
+            <button key={s.id} type="button" onClick={() => setSel(i)} onDoubleClick={() => onConfirm(i, notify)} aria-pressed={i === sel}
+              className={cx("flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors", i === sel ? "border-ai/40 bg-ai/[0.06]" : "border-transparent hover:bg-sunken")}>
+              <Kbd>{i + 1}</Kbd>
+              <span className="flex-1"><span className="block font-mono text-[13.5px] font-medium tnum">{s.label}</span><span className="block text-[12px] text-muted">{s.hint}</span></span>
+              {i === sel && <Icon n="Check" size={15} className="text-ai" />}
+            </button>
+          ))}
+        </div>
+        <label htmlFor="notify-wa" className="mx-4 flex cursor-pointer items-center gap-2.5 rounded-lg py-2 text-[13px]">
+          <input id="notify-wa" type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--ai))]" />
+          Copilot envia o convite pelo WhatsApp e resolve a tarefa de retorno
+        </label>
+        <div className="flex items-center justify-end gap-2 border-t border-fg/[0.08] p-3">
+          <button type="button" onClick={onClose} className="h-8 rounded-lg px-3 text-[13px] font-medium text-muted hover:bg-sunken">Cancelar</button>
+          <button type="button" onClick={() => onConfirm(sel, notify)} className="inline-flex h-8 items-center gap-2 rounded-lg bg-fg px-3 text-[13px] font-medium text-bg hover:bg-fg/85">
+            Agendar <Kbd className="border-bg/20 bg-bg/10 text-bg/80 shadow-none">↵</Kbd>
+          </button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+const UPLOAD_TYPES = [["LAUDO", "Laudo"], ["EXAME_LABORATORIAL", "Exame laboratorial"], ["EXAME_IMAGEM", "Exame de imagem"], ["OUTRO", "Outro"]];
+function UploadDialog({ onClose, onConfirm }) {
+  const [type, setType] = useState("EXAME_LABORATORIAL");
+  const ref = useRef(null);
+  useEffect(() => { ref.current && ref.current.focus(); }, []);
+  return (
+    <Overlay onClose={onClose} label="Anexar exame" align="center">
+      <div ref={ref} tabIndex={-1} onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } if (e.key === "Enter") { e.preventDefault(); onConfirm(type); } }} className="outline-none">
+        <div className="flex items-center gap-2 border-b border-fg/[0.08] p-4"><Icon n="Paperclip" size={16} className="text-muted" /><h2 className="text-[15px] font-semibold">Anexar exame à ficha</h2><span className="ml-auto"><Kbd>Esc</Kbd></span></div>
+        <div className="flex flex-col gap-3 p-4">
+          <div className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-fg/[0.14] bg-sunken/60 px-4 py-7 text-center">
+            <Icon n="CloudUpload" size={22} className="text-muted" />
+            <span className="text-[13px] font-medium">Arraste o PDF ou imagem aqui</span>
+            <span className="text-[12px] text-muted">ou use a câmera do balcão · até 20 MB · o Copilot lê a data e o laboratório</span>
+            <span className="mt-1 inline-flex items-center gap-2 rounded-lg border border-fg/[0.1] bg-surface px-2.5 py-1 font-mono text-[12px] text-muted tnum"><Icon n="FileText" size={13} />tsh-t4-livre-2026-10-09.pdf · 280 KB</span>
+          </div>
+          <fieldset className="flex flex-wrap gap-1.5">
+            <legend className="mb-1.5 text-[12px] font-medium text-muted">Tipo do documento</legend>
+            {UPLOAD_TYPES.map(([v, l]) => (
+              <label key={v} className={cx("inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium", type === v ? "border-ai/40 bg-ai/[0.06]" : "border-fg/[0.1] hover:bg-sunken")}>
+                <input type="radio" name="doc-type" value={v} checked={type === v} onChange={() => setType(v)} className="h-3.5 w-3.5 accent-[rgb(var(--ai))]" />{l}
+              </label>
+            ))}
+          </fieldset>
+          <p className="flex items-center gap-1.5 text-[12px] text-ai"><Icon n="Sparkles" size={13} />Parece o TSH pedido pelo Dr. Menezes em 30/08 — o Copilot vai fechar a trilha "Exame pendente".</p>
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-fg/[0.08] p-3">
+          <button type="button" onClick={onClose} className="h-8 rounded-lg px-3 text-[13px] font-medium text-muted hover:bg-sunken">Cancelar</button>
+          <button type="button" onClick={() => onConfirm(type)} className="inline-flex h-8 items-center gap-2 rounded-lg bg-fg px-3 text-[13px] font-medium text-bg hover:bg-fg/85">Anexar <Kbd className="border-bg/20 bg-bg/10 text-bg/80 shadow-none">↵</Kbd></button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+const SHORTCUTS = [
+  ["Disparar contato da trilha pendente", ["D"]],
+  ["Agendar retorno", ["A"]],
+  ["Mensagem pelo WhatsApp", ["M"]],
+  ["Anexar exame", ["U"]],
+  ["Abas: visão geral, consultas, exames, conversas", ["1", "2", "3", "4"]],
+  ["Ir para aba (sequência)", ["G", "O / C / E / V"]],
+  ["Navegar entre exames na pré-visualização", ["←", "→"]],
+  ["Fechar pré-visualização ou diálogo", ["Esc"]],
+  ["Desfazer última ação", ["Z"]],
+  ["Busca rápida", ["Ctrl", "K"]],
+  ["Esta lista", ["?"]],
+];
+
+function ShortcutsDialog({ onClose }) {
+  const ref = useRef(null);
+  useEffect(() => { ref.current && ref.current.focus(); }, []);
+  return (
+    <Overlay onClose={onClose} label="Atalhos de teclado" align="center">
+      <div ref={ref} tabIndex={-1} onKeyDown={(e) => (e.key === "Escape" || e.key === "?") && onClose()} className="outline-none">
+        <div className="flex items-center gap-2 border-b border-fg/[0.08] p-4"><Icon n="Keyboard" size={16} className="text-muted" /><h2 className="text-[15px] font-semibold">Atalhos do Paciente 360</h2><span className="ml-auto"><Kbd>Esc</Kbd></span></div>
+        <ul className="divide-y divide-fg/[0.06] px-4 py-1">
+          {SHORTCUTS.map(([label, keys]) => (
+            <li key={label} className="flex items-center justify-between gap-4 py-2.5 text-[13px]"><span>{label}</span><span className="flex gap-1">{keys.map((k) => <Kbd key={k}>{k}</Kbd>)}</span></li>
+          ))}
+        </ul>
+      </div>
+    </Overlay>
+  );
+}
+
+function Toast({ toast, onUndo, onClose }) {
+  if (!toast) return null;
+  return (
+    <div className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4" style={{ bottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}>
+      <div key={toast.id} role="status" className="anim-pop pointer-events-auto flex max-w-[560px] items-center gap-3 rounded-xl border border-fg/[0.1] bg-fg py-2 pl-3 pr-2 text-[13px] text-bg shadow-[0_20px_50px_-20px_rgb(0_0_0/0.5)]">
+        <Icon n={toast.icon || "Check"} size={15} className={toast.tone === "ai" ? "text-[rgb(var(--ai))]" : "text-[rgb(var(--ok))]"} />
+        <span className="min-w-0 flex-1">{toast.msg}</span>
+        {toast.undo && (
+          <button type="button" onClick={onUndo} className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 font-medium text-bg/80 hover:bg-bg/10">
+            Desfazer <Kbd className="border-bg/20 bg-bg/10 text-bg/80 shadow-none">Z</Kbd>
+          </button>
+        )}
+        <button type="button" onClick={onClose} aria-label="Fechar aviso" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-bg/60 hover:bg-bg/10"><Icon n="X" size={14} /></button>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── app ───────────────────────── */
+function App() {
+  const [now, setNow] = useState(START);
+  const [tab, setTab] = useState("overview");
+  const [cpfShown, setCpfShown] = useState(false);
+  const [contact, setContact] = useState({ state: "idle", slot: 0, sentAt: null, chosenAt: null });
+  const [small, setSmall] = useState({ pw_nevos: "idle", pw_tsh: "idle" });
+  const [messages, setMessages] = useState(MESSAGES);
+  const [exams, setExams] = useState(EXAMS);
+  const [preview, setPreview] = useState(null);
+  const [palette, setPalette] = useState(false);
+  const [schedule, setSchedule] = useState(false);
+  const [upload, setUpload] = useState(false);
+  const [help, setHelp] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [gPrefix, setGPrefix] = useState(false);
+  const composerRef = useRef(null);
+  const timers = useRef([]);
+
+  useEffect(() => { const t = setInterval(() => setNow((n) => n + 1), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 6000); return () => clearTimeout(t); }, [toast]);
+  useEffect(() => { if (!gPrefix) return; const t = setTimeout(() => setGPrefix(false), 1200); return () => clearTimeout(t); }, [gPrefix]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  const showToast = (msg, opts = {}) => setToast({ id: Math.random(), msg, ...opts });
+  const later = (ms, fn) => { const t = setTimeout(fn, ms); timers.current.push(t); return t; };
+  const say = (from, text, delay = 0) => later(delay, () => setMessages((m) => [...m, { id: "m" + Math.random(), date: "2026-10-09", t: START + Math.floor(delay / 1000), from, text }]));
+
+  // Pathway hero: Copilot envia → paciente responde → passo concluído. Z desfaz tudo.
+  function fireContact() {
+    if (contact.state !== "idle") return;
+    const prev = { contact, messages };
+    setContact((c) => ({ ...c, state: "sending" }));
+    later(1200, () => {
+      setContact((c) => ({ ...c, state: "sent", sentAt: now + 1 }));
+      say("copilot", "Oi, Camila! O laudo da sua biópsia já chegou e a Dra. Helena quer entregá-lo pessoalmente. Tenho estes horários: 1) Ter 14/10 09:30 · 2) Qua 15/10 08:45 · 3) Qui 16/10 11:00. Responda com o número.");
+    });
+    later(4600, () => {
+      say("patient", "1 — terça 9:30 fica ótimo!");
+      say("copilot", "Combinado! Retorno confirmado para Ter 14/10 às 09:30 com a Dra. Helena, Sala 1. Até lá.", 400);
+      setContact((c) => ({ ...c, state: "chosen", chosenAt: now + 5 }));
+      showToast("Camila escolheu Ter 14/10 · 09:30 · retorno agendado e tarefa resolvida pelo Copilot", { icon: "CalendarCheck", tone: "ai", undo: prev });
+    });
+  }
+
+  function fireSmall(id) {
+    if (small[id] !== "idle") return;
+    const pw = PATHWAYS.find((p) => p.id === id);
+    const prev = { small };
+    setSmall((s) => ({ ...s, [id]: "sending" }));
+    later(900, () => {
+      setSmall((s) => ({ ...s, [id]: "done" }));
+      if (id === "pw_tsh") say("copilot", "Oi, Camila! O Dr. Menezes pediu o TSH e T4 livre em 30/08 e ainda não recebemos o resultado. O pedido está neste link e o Lab. São Lucas (conveniado Unimed) atende sem agendamento. Posso ajudar com algo?");
+      showToast(pw.action.done, { icon: id === "pw_tsh" ? "Send" : "BellPlus", tone: "ai", undo: prev });
+    });
+  }
+
+  function confirmSchedule(i, notify) {
+    const prev = { contact, messages };
+    setSchedule(false);
+    setContact({ state: "chosen", slot: i, sentAt: now, chosenAt: now });
+    if (notify) say("copilot", `Olá, Camila! Seu retorno para entrega do laudo foi agendado para ${SLOTS[i].label} com a Dra. Helena. Responda 1 para confirmar.`);
+    showToast(`Retorno agendado para ${SLOTS[i].label}${notify ? " · convite enviado pelo WhatsApp" : ""}`, { icon: "CalendarCheck", tone: "ai", undo: prev });
+  }
+
+  function confirmUpload(type) {
+    const prev = { exams, small };
+    setUpload(false);
+    const label = Object.fromEntries(UPLOAD_TYPES)[type];
+    const doc = { id: "e" + Math.random(), date: "2026-10-09", type, typeLabel: label, title: "TSH · T4 livre", source: "Lab. São Lucas", file: "tsh-t4-livre-2026-10-09.pdf", size: "280 KB", kind: "lab", doc: "menezes", flagged: false };
+    setExams((e) => [doc, ...e]);
+    setSmall((s) => ({ ...s, pw_tsh: "done" }));
+    setTab("exams");
+    showToast("Exame anexado · trilha do TSH atualizada e Dr. Menezes avisado", { icon: "Paperclip", tone: "ok", undo: prev });
+  }
+
+  function sendMessage(text) {
+    const prev = { messages };
+    say("staff", text);
+    showToast("Mensagem enviada pelo WhatsApp", { icon: "Send", tone: "ok", undo: prev });
+  }
+
+  function undo() {
+    if (!toast || !toast.undo) return;
+    const u = toast.undo;
+    timers.current.forEach(clearTimeout); timers.current = [];
+    if (u.contact) setContact(u.contact);
+    if (u.messages) setMessages(u.messages);
+    if (u.small) setSmall(u.small);
+    if (u.exams) setExams(u.exams);
+    setToast({ id: Math.random(), msg: "Ação desfeita", icon: "Undo2", tone: "ai" });
+  }
+
+  async function copyPhone() {
+    const digits = PATIENT.phone;
+    try {
+      if (!navigator.clipboard) throw new Error("sem clipboard");
+      await navigator.clipboard.writeText(digits);
+      showToast("Telefone copiado", { icon: "Copy" });
+    } catch (err) {
+      try {
+        const ta = document.createElement("textarea"); ta.value = digits; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+        showToast("Telefone copiado", { icon: "Copy" });
+      } catch (err2) {
+        showToast(`Não deu para copiar automaticamente: ${digits}`, { icon: "Copy", tone: "ai" });
+      }
+    }
+  }
+
+  function toggleCpf() {
+    const next = !cpfShown;
+    setCpfShown(next);
+    if (next) showToast("CPF revelado · acesso registrado na auditoria (LGPD)", { icon: "ShieldCheck", tone: "ai" });
+  }
+
+  const openExam = (id) => { setPreview(id); };
+  const examIndex = exams.findIndex((e) => e.id === preview);
+  const movePreview = (dir) => setPreview(exams[(examIndex + dir + exams.length) % exams.length].id);
+  const closePreview = () => {
+    const id = preview; setPreview(null);
+    requestAnimationFrame(() => { const el = document.querySelector(`[data-exam="${id}"]`); el && el.focus({ preventScroll: true }); });
+  };
+
+  const action = (k) => {
+    if (k === "a") { if (contact.state === "chosen") { showToast("Retorno já agendado para Ter 14/10 · 09:30", { icon: "CalendarCheck" }); return; } setSchedule(true); }
+    else if (k === "m") { setTab("chat"); requestAnimationFrame(() => composerRef.current && composerRef.current.focus()); }
+    else if (k === "u") setUpload(true);
+    else if (k === "d") fireContact();
+  };
+  const navigate = (label) => showToast(`${label} é outra tela desta série. O Paciente 360 continua aqui.`, { icon: "LayoutGrid", tone: "ai" });
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const k = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && k === "k") { e.preventDefault(); setPalette((o) => !o); return; }
+      if (palette || schedule || upload || help || preview) return;
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (gPrefix) {
+        const t = TABS.find((x) => x.key === k);
+        setGPrefix(false);
+        if (t) { e.preventDefault(); setTab(t.id); return; }
+      }
+      if (e.key === "/") { e.preventDefault(); setPalette(true); return; }
+      if (e.key === "?") { e.preventDefault(); setHelp(true); return; }
+      if (k === "g") { setGPrefix(true); return; }
+      if (k === "z") { e.preventDefault(); undo(); return; }
+      if (["1", "2", "3", "4"].includes(k)) { e.preventDefault(); setTab(TABS[Number(k) - 1].id); return; }
+      if (["a", "m", "u", "d"].includes(k)) { e.preventDefault(); action(k); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const paletteItems = useMemo(() => {
+    const actions = [
+      contact.state === "idle" && { id: "a-d", group: "Ações", icon: "Send", tone: "ai", label: "Disparar contato · retorno para entrega de laudo", hint: "Copilot oferece 3 horários pelo WhatsApp", kbd: ["D"], run: () => fireContact() },
+      { id: "a-a", group: "Ações", icon: "CalendarPlus", tone: "ok", label: "Agendar retorno com a Dra. Helena", hint: "Sugestões pela preferência de manhã", kbd: ["A"], run: () => action("a") },
+      { id: "a-m", group: "Ações", icon: "MessageCircle", label: "Mandar mensagem pelo WhatsApp", kbd: ["M"], run: () => action("m") },
+      { id: "a-u", group: "Ações", icon: "Paperclip", label: "Anexar exame à ficha", kbd: ["U"], run: () => action("u") },
+      { id: "a-cpf", group: "Ações", icon: cpfShown ? "EyeOff" : "Eye", label: cpfShown ? "Ocultar CPF" : "Revelar CPF", hint: "Registrado na auditoria", run: () => toggleCpf() },
+      { id: "a-theme", group: "Ações", icon: "SunMoon", label: "Alternar tema claro e escuro", run: () => window.__toggleTheme && window.__toggleTheme() },
+      { id: "a-help", group: "Ações", icon: "Keyboard", label: "Mostrar atalhos de teclado", kbd: ["?"], run: () => setHelp(true) },
+    ].filter(Boolean);
+    const ex = exams.map((e) => ({ id: "e-" + e.id, group: "Exames de Camila", icon: "FileText", label: e.title, hint: `${dmy(e.date)} · ${e.source}`, run: () => openExam(e.id) }));
+    const tabs = TABS.map((t, i) => ({ id: "t-" + t.id, group: "Abas", icon: t.icon, label: t.label, kbd: [String(i + 1)], run: () => setTab(t.id) }));
+    const nav = [
+      { id: "n-cockpit", group: "Ir para", icon: "LayoutGrid", label: "Cockpit", hint: "Fluxo ao vivo da clínica", run: () => navigate("O Cockpit") },
+      { id: "n-agenda", group: "Ir para", icon: "CalendarDays", label: "Agenda inteligente", hint: "Dia, semana e por profissional", run: () => navigate("A Agenda inteligente") },
+      { id: "n-comms", group: "Ir para", icon: "MessagesSquare", label: "Centro de Resgate", hint: "Conversas do Copilot e lista de espera", run: () => navigate("O Centro de Resgate") },
+      { id: "n-list", group: "Ir para", icon: "UsersRound", label: "Lista de pacientes", hint: "Ana Ribeiro, Lúcia Andrade, Sônia Valente…", run: () => navigate("A lista de pacientes") },
+    ];
+    return [...actions, ...ex, ...tabs, ...nav];
+  }, [contact.state, cpfShown, exams]);
+
+  const closeOverlay = (setter) => () => setter(false);
+  const previewExam = preview && exams[examIndex];
+  const pending = (contact.state === "chosen" ? 0 : 1) + (small.pw_tsh === "done" ? 0 : 1);
+
+  return (
+    <div className="min-h-full">
+      <Header now={now} onOpenPalette={() => setPalette(true)} onNavigate={navigate} />
+
+      <main className="mx-auto flex max-w-[1680px] flex-col gap-4 px-4 pb-24 pt-4 sm:px-6">
+        <IdentityBar cpfShown={cpfShown} onToggleCpf={toggleCpf} onCopyPhone={copyPhone} onAction={action} />
+
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <PathwayHero pw={PATHWAYS[0]} contact={contact} slots={SLOTS} onContact={fireContact} onPickSlot={(i) => setContact((c) => ({ ...c, slot: i }))} onOpenDoc={openExam} />
+
+            <section aria-label="Ficha" className="min-w-0 overflow-hidden rounded-2xl border border-fg/[0.08] bg-surface">
+              <div role="tablist" aria-label="Seções da ficha" className="flex min-w-0 items-center gap-0.5 overflow-x-auto border-b border-fg/[0.08] px-2 pt-2">
+                {TABS.map((t, i) => (
+                  <button key={t.id} role="tab" type="button" id={`tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`panel-${t.id}`} onClick={() => setTab(t.id)}
+                    className={cx("relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-t-lg px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+                      tab === t.id ? "text-fg" : "text-muted hover:bg-sunken/70 hover:text-fg")}>
+                    <Icon n={t.icon} size={14} />{t.label}
+                    {t.count != null && <span className="rounded-full bg-sunken px-1.5 font-mono text-[11px] text-muted tnum">{t.id === "exams" ? exams.length : t.id === "chat" ? messages.length : t.count}</span>}
+                    <Kbd className="ml-0.5 hidden sm:inline-flex">{i + 1}</Kbd>
+                    {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-fg" aria-hidden="true" />}
+                  </button>
+                ))}
+                <button type="button" onClick={() => setHelp(true)} className="ml-auto hidden items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted hover:bg-sunken hover:text-fg sm:inline-flex"><Kbd>?</Kbd>atalhos</button>
+              </div>
+
+              <div key={tab} className="anim-enter p-4" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+                {tab === "overview" && (
+                  <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-2">
+                    <div className="flex flex-col gap-2.5">
+                      <div className="flex items-center gap-2"><Icon n="CalendarDays" size={15} className="text-muted" /><h2 className="text-[13px] font-semibold">Últimas consultas</h2><button type="button" onClick={() => setTab("consults")} className="ml-auto inline-flex items-center gap-1 text-[12px] text-ai hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">ver todas <Icon n="ArrowRight" size={12} /></button></div>
+                      <ConsultList items={APPOINTMENTS} limit={4} />
+                    </div>
+                    <div className="flex flex-col gap-2.5">
+                      <div className="flex items-center gap-2"><Icon n="FileText" size={15} className="text-muted" /><h2 className="text-[13px] font-semibold">Exames recentes</h2><span className="text-[12px] text-faint">clique para visualizar</span><button type="button" onClick={() => setTab("exams")} className="ml-auto inline-flex items-center gap-1 text-[12px] text-ai hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">ver todos <Icon n="ArrowRight" size={12} /></button></div>
+                      <ExamTimeline items={exams} limit={3} onOpen={openExam} selectedId={preview} />
+                    </div>
+                  </div>
+                )}
+                {tab === "consults" && (
+                  <div className="flex flex-col gap-2.5">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
+                      <span><span className="font-mono tnum text-fg">{APPOINTMENTS.length}</span> consultas desde <span className="font-mono tnum">{dmy(PATIENT.since)}</span></span>
+                      <span>· <span className="font-mono tnum text-fg">{APPOINTMENTS.filter((a) => a.status === "noshow").length}</span> falta</span>
+                      <span>· ticket médio particular <span className="font-mono tnum text-fg">{brl(472)}</span></span>
+                    </div>
+                    <ConsultList items={APPOINTMENTS} />
+                  </div>
+                )}
+                {tab === "exams" && (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[12px] text-muted"><span className="font-mono tnum text-fg">{exams.length}</span> documentos · Enter ou clique abre a pré-visualização · <Kbd>←</Kbd> <Kbd>→</Kbd> navegam</span>
+                      <Btn k="U" icon="Paperclip" className="ml-auto" onClick={() => action("u")}>Anexar</Btn>
+                    </div>
+                    <ExamTimeline items={exams} onOpen={openExam} selectedId={preview} />
+                  </div>
+                )}
+                {tab === "chat" && <Chat messages={messages} onSend={sendMessage} composerRef={composerRef} />}
+              </div>
+            </section>
+          </div>
+
+          <aside aria-label="Dados e trilhas" className="flex min-w-0 flex-col gap-4">
+            <Panel title="Outras trilhas" icon="Route" right={pending ? `${pending} pendente${pending > 1 ? "s" : ""}` : "tudo em dia"}>
+              <ul className="flex flex-col divide-y divide-fg/[0.06]">
+                {PATHWAYS.slice(1).map((pw) => <SmallPathway key={pw.id} pw={pw} state={small[pw.id]} onAction={fireSmall} onOpenDoc={openExam} />)}
+              </ul>
+            </Panel>
+            <Panel title="Dados cadastrais" icon="IdCard" right="dados fictícios">
+              <Demographics cpfShown={cpfShown} />
+              <p className="mt-2 flex items-start gap-1.5 text-[12px] text-faint"><Icon n="ShieldCheck" size={13} className="mt-px shrink-0" />CPF e carteirinha ficam mascarados por padrão; revelar registra quem viu e quando (LGPD).</p>
+            </Panel>
+            <Panel title="Copilot observa" icon="Sparkles">
+              <ul className="flex flex-col gap-2 text-[12.5px] leading-snug text-fg/85">
+                {[
+                  ["CheckCheck", "ai", "Responde confirmações em menos de 5 min; o canal WhatsApp é confiável para esta paciente."],
+                  ["Sunrise", "muted", "Todas as 5 consultas do ano foram antes das 10:30; ofereça manhã primeiro."],
+                  ["TriangleAlert", "warn", "Única falta (03/03) foi retorno com o Dr. Menezes sem lembrete prévio — hoje o Copilot lembra 48 h antes."],
+                ].map(([icon, tone, text]) => <li key={text} className="flex gap-2"><Icon n={icon} size={14} className={cx("mt-0.5 shrink-0", TEXT[tone])} />{text}</li>)}
+              </ul>
+            </Panel>
+          </aside>
+        </div>
+
+        <footer className="hidden flex-wrap items-center gap-x-4 gap-y-2 border-t border-fg/[0.06] px-1 pt-3 text-[12px] text-muted md:flex">
+          {[["D", "disparar contato"], ["A", "agendar"], ["M", "mensagem"], ["U", "anexar"], ["1–4", "abas"], ["←→", "exames"], ["Z", "desfazer"], ["?", "atalhos"]].map(([k, l]) => (
+            <span key={k} className="inline-flex items-center gap-1.5"><Kbd>{k}</Kbd>{l}</span>
+          ))}
+          <span className="ml-auto text-faint">Dados de exemplo · {CLINIC}</span>
+        </footer>
+      </main>
+
+      {palette && <CommandPalette items={paletteItems} onClose={closeOverlay(setPalette)} />}
+      {schedule && <ScheduleDialog onClose={closeOverlay(setSchedule)} onConfirm={confirmSchedule} />}
+      {upload && <UploadDialog onClose={closeOverlay(setUpload)} onConfirm={confirmUpload} />}
+      {help && <ShortcutsDialog onClose={closeOverlay(setHelp)} />}
+      {previewExam && <ExamPreview exam={previewExam} index={examIndex} total={exams.length} onClose={closePreview} onPrev={() => movePreview(-1)} onNext={() => movePreview(1)}
+        onShare={(k) => showToast(k === "send" ? `${previewExam.title} enviado a Camila pelo WhatsApp` : `No app, este botão baixa ${previewExam.file}`, { icon: k === "send" ? "Send" : "Download", tone: k === "send" ? "ai" : "ok" })} />}
+      <Toast toast={toast} onUndo={undo} onClose={() => setToast(null)} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>

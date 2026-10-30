@@ -14,6 +14,8 @@ export const CheckAvailabilitySchema = z.object({
     .regex(TIME_PATTERN, { message: "time deve estar no formato HH:mm." }),
   durationMinutes: z.number().int().min(5).max(480).optional(),
   excludeAppointmentId: z.string().uuid().optional(),
+  /** Alias legado de `excludeAppointmentId` (nome usado no DTO antigo). */
+  ignoreAppointmentId: z.string().uuid().optional(),
 });
 
 export type CheckAvailability = z.infer<typeof CheckAvailabilitySchema>;
@@ -42,4 +44,10 @@ export class CheckAvailabilityRequest implements CheckAvailability {
       "ID de consulta a excluir da checagem (útil em reagendamentos)",
   })
   excludeAppointmentId?: string;
+
+  @ApiPropertyOptional({
+    description: "Alias de excludeAppointmentId",
+    deprecated: true,
+  })
+  ignoreAppointmentId?: string;
 }

@@ -177,6 +177,11 @@ export class ListSlotsQueryDto {
   @Max(480)
   @IsOptional()
   readonly durationMinutes?: number;
+
+  @ApiPropertyOptional()
+  @IsUUID()
+  @IsOptional()
+  readonly excludeAppointmentId?: string;
 }
 
 export class ListAppointmentsQueryDto extends PageOptionsDto {

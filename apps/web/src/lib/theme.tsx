@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { applyFluentTheme } from "./fluent-theme";
 
 export type ThemePreference = "light" | "dark" | "system";
 
@@ -48,14 +49,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => query.removeEventListener("change", onChange);
   }, []);
 
+  const resolved: "light" | "dark" =
+    preference === "system" ? (systemDark ? "dark" : "light") : preference;
+
+  // O atributo sempre carrega o tema resolvido: o CSS tem um único bloco de
+  // tokens escuros, e "sistema" é resolvido aqui (e no script de index.html).
   useEffect(() => {
-    const root = document.documentElement;
-    if (preference === "system") {
-      root.removeAttribute("data-theme");
-    } else {
-      root.setAttribute("data-theme", preference);
-    }
-  }, [preference]);
+    document.documentElement.setAttribute("data-theme", resolved);
+    applyFluentTheme(resolved);
+    const appSurface = getComputedStyle(document.documentElement)
+      .getPropertyValue("--color-surface-app")
+      .trim();
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", appSurface);
+  }, [resolved]);
 
   const setPreference = useCallback((next: ThemePreference) => {
     setPreferenceState(next);
@@ -70,11 +78,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<ThemeContextValue>(
     () => ({
       preference,
-      resolved:
-        preference === "system" ? (systemDark ? "dark" : "light") : preference,
+      resolved,
       setPreference,
     }),
-    [preference, systemDark, setPreference],
+    [preference, resolved, setPreference],
   );
 
   return (

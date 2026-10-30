@@ -4,24 +4,25 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#F8FAFC" />
-    <title>ClinicFlow — Recepção Clínica</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
-      rel="stylesheet"
+    <meta name="theme-color" content="#f1f6fa" />
+    <meta
+      name="description"
+      content="ClinicFlow organiza agenda, chegadas, documentos e retornos em um fluxo claro para a recepção da clínica."
     />
+    <title>ClinicFlow — A rotina da recepção, em fluxo</title>
   </head>
   <body>
     <script>
       // Aplica o tema antes da primeira pintura. Sem isto, quem escolheu escuro
       // vê um lampejo branco a cada carregamento.
       try {
-        const t = localStorage.getItem("clinicflow.theme");
-        if (t === "dark" || t === "light")
-          document.documentElement.setAttribute("data-theme", t);
-      } catch {}
+        let t = localStorage.getItem("clinicflow.theme");
+        if (t !== "dark" && t !== "light")
+          t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", t);
+      } catch {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
     </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
