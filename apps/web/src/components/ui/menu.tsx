@@ -173,7 +173,7 @@ export function Menu({
                 if (el && el.getAttribute("data-keep-open") === null) close();
               }}
               className={cn(
-                "z-[70] min-w-56 rounded-raised border border-border-default bg-surface-raised p-1 shadow-raised animate-pop",
+                "z-[70] min-w-56 rounded-raised border border-border-subtle bg-surface-raised p-1 shadow-raised animate-pop",
                 className,
               )}
             >
@@ -210,8 +210,8 @@ export function MenuItem({
       aria-disabled={disabled || undefined}
       onClick={onSelect}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-label font-medium outline-none transition-colors [&_svg]:size-4 [&_svg]:shrink-0",
-        "focus-visible:bg-surface-sunken hover:bg-surface-sunken pointer-coarse:min-h-11",
+        "flex w-full items-center gap-2.5 rounded-marker px-2.5 py-2 text-left text-label font-medium outline-none transition-colors [&_svg]:size-4 [&_svg]:shrink-0",
+        "focus-visible:bg-surface-hover hover:bg-surface-hover pointer-coarse:min-h-11",
         "focus-visible:ring-2 focus-visible:ring-accent-ink",
         "disabled:cursor-not-allowed disabled:opacity-50",
         tone === "danger" ? "text-danger" : "text-ink-primary",

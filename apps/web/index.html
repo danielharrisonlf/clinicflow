@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f1f6fa" />
+    <meta name="theme-color" content="#f8fafc" />
     <meta
       name="description"
       content="ClinicFlow organiza agenda, chegadas, documentos e retornos em um fluxo claro para a recepção da clínica."
@@ -20,6 +20,11 @@
         if (t !== "dark" && t !== "light")
           t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         document.documentElement.setAttribute("data-theme", t);
+        // A barra do navegador acompanha o surface-app do tema já na carga.
+        if (t === "dark")
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute("content", "#020617");
       } catch {
         document.documentElement.setAttribute("data-theme", "light");
       }

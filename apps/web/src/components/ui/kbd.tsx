@@ -12,8 +12,8 @@ export function Kbd({
     <kbd
       className={cn(
         "inline-flex h-5 min-w-5 items-center justify-center rounded-marker",
-        "border border-border-default bg-surface-sunken px-1.5",
-        "font-mono text-micro font-semibold text-ink-secondary",
+        "border border-border-subtle bg-surface-sunken px-1.5",
+        "font-mono text-micro font-medium text-ink-secondary",
         "pointer-coarse:hidden",
         className,
       )}

@@ -4,7 +4,7 @@ import { Button } from "./button";
 /**
  * Rede de proteção de renderização. Sem ela, um campo nulo inesperado num DTO
  * deixava a recepção olhando uma tela branca. Com ela, só a área quebrada cai,
- * com saída: recarregar a área ou voltar para o painel.
+ * com saída: recarregar a área ou voltar para o Cockpit.
  */
 export class ErrorBoundary extends Component<
   { children: ReactNode; resetKey?: string },
@@ -42,10 +42,10 @@ export class ErrorBoundary extends Component<
           Esta tela encontrou um problema
         </p>
         <p className="text-body text-ink-secondary">
-          Nada foi perdido. Recarregue a tela; se continuar, volte ao painel e
+          Nada foi perdido. Recarregue a tela; se continuar, volte ao Cockpit e
           avise o suporte.
         </p>
-        <div className="mt-2 flex gap-2">
+        <div className="mt-2 flex flex-wrap justify-center gap-2">
           <Button onClick={() => this.setState({ error: null })}>
             Recarregar tela
           </Button>
@@ -55,7 +55,7 @@ export class ErrorBoundary extends Component<
               window.location.assign("/");
             }}
           >
-            Ir para o painel
+            Ir para o Cockpit
           </Button>
         </div>
       </div>

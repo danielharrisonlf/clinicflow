@@ -9,6 +9,8 @@ const buttonVariants = cva(
     "relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap select-none",
     "rounded-control font-medium",
     "transition-[background-color,border-color,color,box-shadow,transform] duration-150",
+    // Pressionado desce 1px: o clique tem corpo sem animação de enfeite.
+    "active:translate-y-px",
     "disabled:pointer-events-none disabled:opacity-50",
     "aria-disabled:pointer-events-none aria-disabled:opacity-50",
     "[&_svg]:size-4 [&_svg]:shrink-0",
@@ -21,9 +23,9 @@ const buttonVariants = cva(
         primary:
           "bg-accent text-ink-onaccent hover:bg-accent-hover active:bg-accent-active",
         secondary:
-          "border border-border-default bg-surface-base text-ink-primary hover:border-border-strong hover:bg-surface-app active:bg-surface-sunken",
+          "border border-border-default bg-surface-base text-ink-primary hover:border-border-strong hover:bg-surface-hover active:bg-surface-sunken",
         ghost:
-          "bg-transparent text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary active:bg-border-subtle",
+          "bg-transparent text-ink-secondary hover:bg-surface-hover hover:text-ink-primary active:bg-surface-sunken",
         destructive:
           "bg-danger-fill text-ink-onaccent hover:bg-danger-fill-hover",
         "destructive-ghost":

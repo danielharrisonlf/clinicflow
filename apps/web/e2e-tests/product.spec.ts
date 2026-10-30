@@ -251,7 +251,7 @@ test("menu mobile fecha com Escape e a página cabe em 390px", async ({
   ).toBeLessThanOrEqual(dimensions.viewport);
 });
 
-test("/conhecer continua público na sessão e / preserva o Painel", async ({
+test("/conhecer continua público na sessão e / preserva o Cockpit", async ({
   page,
 }) => {
   const api = await installRedesignApi(page);
@@ -268,7 +268,7 @@ test("/conhecer continua público na sessão e / preserva o Painel", async ({
 
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Painel do dia" }),
+    page.getByRole("heading", { name: "Cockpit do dia" }),
   ).toBeVisible();
   expect(api.unknownRequests).toEqual([]);
 });

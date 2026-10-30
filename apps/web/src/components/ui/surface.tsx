@@ -1,8 +1,10 @@
 import type * as React from "react";
 import { cn, initials } from "@/lib/utils";
+import { Dot } from "./badge";
 
 /**
- * Superfície de conteúdo. Nunca aninhe painéis: card dentro de card é o
+ * Superfície de conteúdo do bento: base + micro-borda + sombra difusa (no
+ * escuro, só a micro-borda). Nunca aninhe painéis: card dentro de card é o
  * container preguiçoso. Dentro do painel, a divisão é por linha fina.
  */
 export function Panel({
@@ -14,7 +16,7 @@ export function Panel({
   return (
     <Tag
       className={cn(
-        "min-w-0 rounded-card border border-border-default bg-surface-base",
+        "min-w-0 rounded-card border border-border-subtle bg-surface-base shadow-panel",
         className,
       )}
       {...props}
@@ -83,9 +85,10 @@ export function PanelBody({
 }
 
 /**
- * Contagem de resumo. Não é o "número gigante + rótulo pequeno" de template:
- * rótulo e número na mesma linha de leitura, e o número carrega a cor do
- * estado só quando o estado pede atenção.
+ * Stat card do bento. Anatomia fixa: rótulo em caixa-alta pequena, valor em
+ * mono, linha de apoio ("3 sem resposta") e, quando o valor é vivo, um dot
+ * de estado. O valor carrega a cor do tom só quando o estado pede atenção.
+ * Sem sparkline nem tendência: a interface não inventa série histórica.
  */
 export function StatTile({
   label,
@@ -93,18 +96,22 @@ export function StatTile({
   hint,
   tone = "default",
   icon,
+  dot,
   className,
 }: {
   label: string;
   value: React.ReactNode;
   hint?: React.ReactNode;
-  tone?: "default" | "accent" | "warning" | "danger";
+  tone?: "default" | "accent" | "revenue" | "warning" | "danger";
   icon?: React.ReactNode;
+  /** Dot ao lado do rótulo, na cor do tom. `pulse` só para o que está vivo agora. */
+  dot?: "static" | "pulse";
   className?: string;
 }) {
   const toneClass = {
     default: "text-ink-primary",
     accent: "text-accent-ink",
+    revenue: "text-revenue",
     warning: "text-warning",
     danger: "text-danger",
   }[tone];
@@ -112,35 +119,38 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "flex min-w-0 items-start gap-3 rounded-card border border-border-default bg-surface-base px-4 py-3",
+        "flex min-w-0 flex-col gap-2 rounded-card border border-border-subtle bg-surface-base p-4 shadow-panel",
         className,
       )}
     >
-      {icon ? (
-        <span
-          className={cn(
-            "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-control bg-surface-sunken [&_svg]:size-4",
-            toneClass,
-          )}
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
-      ) : null}
-      <div className="min-w-0">
-        <p className="truncate text-label text-ink-secondary">{label}</p>
-        <p
-          className={cn(
-            "font-mono text-metric-sm font-semibold tabular-nums md:text-metric",
-            toneClass,
-          )}
-        >
-          {value}
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <p className="flex min-w-0 items-center gap-1.5 text-micro font-semibold tracking-wider text-ink-tertiary uppercase">
+          {dot ? (
+            <Dot
+              pulse={dot === "pulse"}
+              className={tone === "default" ? "text-ink-tertiary" : toneClass}
+            />
+          ) : null}
+          <span className="truncate">{label}</span>
         </p>
-        {hint ? (
-          <p className="mt-0.5 text-micro text-ink-tertiary">{hint}</p>
+        {icon ? (
+          <span
+            className="flex shrink-0 text-ink-tertiary [&_svg]:size-4"
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
         ) : null}
       </div>
+      <p
+        className={cn(
+          "font-mono text-metric-sm font-semibold tracking-tight tabular-nums md:text-metric",
+          toneClass,
+        )}
+      >
+        {value}
+      </p>
+      {hint ? <p className="text-label text-ink-secondary">{hint}</p> : null}
     </div>
   );
 }

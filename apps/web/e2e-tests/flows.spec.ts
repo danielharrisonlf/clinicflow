@@ -51,7 +51,7 @@ test("painel: transição pela linha e desfazer pelo aviso", async ({ page }) =>
   await page.goto("/entrar");
   await login(page);
   await expect(
-    page.getByRole("heading", { name: "Painel do dia" }),
+    page.getByRole("heading", { name: "Cockpit do dia" }),
   ).toBeVisible();
   // Só depois do painel: antes disso os tokens ainda não estão no localStorage.
   await page.context().storageState({ path: SESSION });
@@ -88,7 +88,7 @@ test.describe("com sessão salva", () => {
   }) => {
     await page.goto("/");
     await expect(
-      page.getByRole("heading", { name: "Painel do dia" }),
+      page.getByRole("heading", { name: "Cockpit do dia" }),
     ).toBeVisible();
     await page.keyboard.press("Control+k");
     const input = page.getByRole("combobox");
@@ -104,7 +104,7 @@ test.describe("com sessão salva", () => {
   test("queda de rede no F5 não derruba a sessão", async ({ page }) => {
     await page.goto("/");
     await expect(
-      page.getByRole("heading", { name: "Painel do dia" }),
+      page.getByRole("heading", { name: "Cockpit do dia" }),
     ).toBeVisible();
 
     await page.route("**/auth/me", (route) =>
@@ -116,14 +116,14 @@ test.describe("com sessão salva", () => {
     await page.unroute("**/auth/me");
     await page.getByRole("button", { name: "Tentar de novo" }).click();
     await expect(
-      page.getByRole("heading", { name: "Painel do dia" }),
+      page.getByRole("heading", { name: "Cockpit do dia" }),
     ).toBeVisible();
   });
 
   test("menu da conta sai da sessão", async ({ page }) => {
     await page.goto("/");
     await expect(
-      page.getByRole("heading", { name: "Painel do dia" }),
+      page.getByRole("heading", { name: "Cockpit do dia" }),
     ).toBeVisible();
     await page
       .getByRole("button", { name: /Conta de/ })

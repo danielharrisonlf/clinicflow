@@ -37,7 +37,7 @@ const TONE: Record<
   ToastTone,
   { icon: typeof CircleCheck; ink: string; ms: number }
 > = {
-  success: { icon: CircleCheck, ink: "text-success", ms: 6000 },
+  success: { icon: CircleCheck, ink: "text-revenue", ms: 6000 },
   warning: { icon: TriangleAlert, ink: "text-warning", ms: 8000 },
   // Erro fica mais: quem estava olhando o paciente precisa de tempo para ler.
   error: { icon: CircleAlert, ink: "text-danger", ms: 10000 },
@@ -147,7 +147,7 @@ function ToastCard({
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
-      className="pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-raised border border-border-default bg-surface-raised p-3 pr-2 shadow-overlay animate-toast"
+      className="pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-raised border border-border-subtle bg-surface-raised p-3 pr-2 shadow-overlay animate-toast"
     >
       <Icon
         className={cn("mt-0.5 size-5 shrink-0", tone.ink)}
@@ -195,7 +195,7 @@ function ToastCard({
         type="button"
         onClick={onDismiss}
         aria-label="Dispensar aviso"
-        className="flex size-8 shrink-0 items-center justify-center rounded-marker text-ink-tertiary transition-colors hover:bg-surface-sunken hover:text-ink-primary pointer-coarse:size-11"
+        className="flex size-8 shrink-0 items-center justify-center rounded-marker text-ink-tertiary transition-colors hover:bg-surface-hover hover:text-ink-primary pointer-coarse:size-11"
       >
         <X className="size-4" aria-hidden="true" />
       </button>

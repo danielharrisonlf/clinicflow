@@ -13,7 +13,7 @@ export const controlClass = [
   "w-full rounded-control border bg-surface-base text-body text-ink-primary",
   "placeholder:text-ink-tertiary",
   "transition-[border-color,box-shadow] duration-150",
-  "hover:border-border-strong",
+  "hover:border-ink-tertiary",
   "focus-visible:border-accent-ink",
   "disabled:cursor-not-allowed disabled:border-border-default disabled:bg-surface-sunken disabled:text-ink-tertiary",
   "read-only:bg-surface-app",
@@ -206,7 +206,7 @@ export function PasswordField({
           onClick={() => setVisible((current) => !current)}
           aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
           aria-pressed={visible}
-          className="absolute inset-y-1 right-1 flex w-10 items-center justify-center rounded-marker text-ink-tertiary transition-colors hover:bg-surface-sunken hover:text-ink-primary"
+          className="absolute inset-y-1 right-1 flex w-10 items-center justify-center rounded-marker text-ink-tertiary transition-colors hover:bg-surface-hover hover:text-ink-primary"
         >
           {visible ? (
             <EyeOff className="size-4" aria-hidden="true" />

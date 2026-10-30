@@ -46,7 +46,7 @@ export function ThemeMenuItems() {
             tabIndex={-1}
             data-keep-open=""
             onClick={() => setPreference(option.value)}
-            className="flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-body font-medium text-ink-primary outline-none transition-colors hover:bg-surface-sunken focus-visible:bg-surface-sunken focus-visible:ring-2 focus-visible:ring-accent-ink pointer-coarse:min-h-11"
+            className="flex w-full items-center gap-2.5 rounded-marker px-2.5 py-2 text-left text-label font-medium text-ink-primary outline-none transition-colors hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:ring-2 focus-visible:ring-accent-ink pointer-coarse:min-h-11"
           >
             <option.icon
               className="size-4 text-ink-secondary"

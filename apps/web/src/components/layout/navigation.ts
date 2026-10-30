@@ -19,15 +19,15 @@ export interface NavItem {
   group: "atendimento" | "gestao";
   /** Os quatro destinos da bottom nav do celular. O resto vive em "Mais". */
   primary?: boolean;
-  /** Rotas filhas que acendem este item (detalhe de consulta → Painel). */
+  /** Rotas filhas que acendem este item (detalhe de consulta → Cockpit). */
   match?: RegExp;
 }
 
 export const NAV_ITEMS: NavItem[] = [
   {
     to: "/",
-    label: "Painel do dia",
-    shortLabel: "Painel",
+    label: "Cockpit do dia",
+    shortLabel: "Cockpit",
     icon: LayoutDashboard,
     group: "atendimento",
     primary: true,

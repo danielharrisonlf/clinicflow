@@ -9,7 +9,7 @@ const TONE: Record<Tone, { box: string; icon: LucideIcon; ink: string }> = {
   info: { box: "bg-info-weak", icon: Info, ink: "text-info" },
   warning: { box: "bg-warning-weak", icon: TriangleAlert, ink: "text-warning" },
   danger: { box: "bg-danger-weak", icon: CircleAlert, ink: "text-danger" },
-  success: { box: "bg-success-weak", icon: CircleCheck, ink: "text-success" },
+  success: { box: "bg-revenue-weak", icon: CircleCheck, ink: "text-revenue" },
 };
 
 /**

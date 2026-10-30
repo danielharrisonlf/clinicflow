@@ -6,7 +6,7 @@ import {
   Plus,
   Search,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { ButtonLink, IconButton } from "@/components/ui/button";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -44,6 +44,10 @@ export function AppShell({
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  // Ref: o pai recria a função a cada render, e o listener não precisa
+  // ser religado por isso.
+  const openCommandRef = useRef(onOpenCommand);
+  openCommandRef.current = onOpenCommand;
 
   // A navegação por teclado chega ao conteúdo novo sem atravessar toda a barra.
   useEffect(() => {
@@ -52,8 +56,9 @@ export function AppShell({
     }
   }, [location.pathname]);
 
-  // Atalhos de uma tecla do balcão: N nova consulta, S sala de espera.
-  // Param dentro de campo e com qualquer sobreposição aberta.
+  // Atalhos de uma tecla do balcão: / busca (além de Ctrl/⌘K), N nova
+  // consulta, S sala de espera. Param dentro de campo e com qualquer
+  // sobreposição aberta.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented || event.repeat) return;
@@ -61,7 +66,11 @@ export function AppShell({
       if (isTypingTarget(event.target) || overlayOpen()) return;
       if (document.querySelector('[role="menu"]')) return;
       const key = event.key.toLowerCase();
-      if (key === "n") {
+      if (key === "/") {
+        // Sem o preventDefault o Firefox abriria a busca rápida da página.
+        event.preventDefault();
+        openCommandRef.current();
+      } else if (key === "n") {
         event.preventDefault();
         navigate("/consultas/nova");
       } else if (key === "s") {
@@ -84,7 +93,9 @@ export function AppShell({
 
       <SideNav onOpenCommand={onOpenCommand} />
 
-      <div className="flex min-w-0 flex-1 flex-col bg-surface-base md:min-h-dvh md:border-l md:border-border-subtle">
+      {/* Área de trabalho no surface-app: os painéis do bento (surface-base +
+          micro-borda) é que sobem dela. */}
+      <div className="flex min-w-0 flex-1 flex-col bg-surface-app md:min-h-dvh md:border-l md:border-border-subtle">
         <MobileTopBar onOpenCommand={onOpenCommand} />
         <main
           id="conteudo"
@@ -156,9 +167,9 @@ function SideNav({ onOpenCommand }: { onOpenCommand: () => void }) {
           type="button"
           onClick={onOpenCommand}
           aria-label="Buscar paciente, profissional ou ação"
-          title="Buscar (Ctrl K)"
-          aria-keyshortcuts={MOD_KEY === "⌘" ? "Meta+K" : "Control+K"}
-          className="flex h-9 w-full items-center gap-2 rounded-control border border-border-default bg-surface-base px-3 text-left text-label text-ink-tertiary transition-colors hover:border-border-strong hover:text-ink-primary max-lg:size-11 max-lg:justify-center max-lg:px-0"
+          title={`Buscar (${MOD_KEY === "⌘" ? "⌘K" : "Ctrl K"} ou /)`}
+          aria-keyshortcuts={`${MOD_KEY === "⌘" ? "Meta+K" : "Control+K"} /`}
+          className="flex h-9 w-full items-center gap-2 rounded-control border border-border-subtle bg-surface-base px-3 text-left text-label text-ink-tertiary shadow-panel transition-colors hover:border-border-default hover:text-ink-primary max-lg:size-11 max-lg:justify-center max-lg:px-0"
         >
           <Search className="size-4 shrink-0" aria-hidden="true" />
           <span className="flex-1 truncate max-lg:hidden">Buscar…</span>
@@ -196,7 +207,7 @@ function SideNav({ onOpenCommand }: { onOpenCommand: () => void }) {
         />
       </div>
 
-      <div className="shrink-0 border-t border-border-default p-3 max-lg:flex max-lg:justify-center">
+      <div className="shrink-0 border-t border-border-subtle p-3 max-lg:flex max-lg:justify-center">
         <UserMenu placement="right-end" />
       </div>
     </nav>
@@ -215,8 +226,9 @@ function NavGroup({
   badges?: Record<string, number | undefined>;
 }) {
   return (
-    <div className="border-t border-border-default pt-3 first:border-0 first:pt-0">
-      <p className="px-3 pb-2 text-micro font-medium text-ink-tertiary max-lg:sr-only">
+    <div className="border-t border-border-subtle pt-3 first:border-0 first:pt-0">
+      {/* Um dos dois lugares onde a caixa-alta é permitida (DESIGN.md). */}
+      <p className="px-3 pb-2 text-micro font-semibold tracking-wider text-ink-tertiary uppercase max-lg:sr-only">
         {label}
       </p>
       <ul className="flex flex-col gap-0.5">
@@ -229,11 +241,11 @@ function NavGroup({
                 to={item.to}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group relative flex items-center gap-3 rounded-control border-l-2 border-transparent px-3 py-2 transition-colors duration-150",
+                  "group relative flex items-center gap-3 rounded-control px-3 py-2 transition-colors duration-150",
                   "max-lg:flex-col max-lg:gap-1 max-lg:px-1 max-lg:py-2",
                   active
-                    ? "border-accent bg-accent-weak text-accent-ink"
-                    : "text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary",
+                    ? "bg-accent-weak text-accent-ink"
+                    : "text-ink-secondary hover:bg-surface-hover hover:text-ink-primary",
                 )}
               >
                 <item.icon
@@ -287,7 +299,7 @@ function UserMenu({
           {...props}
           aria-label={`Conta de ${user?.name ?? "usuário"}`}
           className={cn(
-            "flex items-center gap-2.5 rounded-control text-left transition-colors hover:bg-surface-sunken",
+            "flex items-center gap-2.5 rounded-control text-left transition-colors hover:bg-surface-hover",
             compact
               ? "size-11 justify-center"
               : "w-full p-1.5 max-lg:size-11 max-lg:justify-center max-lg:p-0",
@@ -340,7 +352,8 @@ function UserMenu({
 function MobileTopBar({ onOpenCommand }: { onOpenCommand: () => void }) {
   const clinicName = useClinicName();
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2.5 border-b border-border-subtle bg-surface-base/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-surface-base/85 md:hidden">
+    // Header móvel: camada sobreposta ao conteúdo que rola, por isso vidro.
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-2.5 border-b border-border-subtle bg-surface-glass px-3 backdrop-blur-md md:hidden">
       <BrandMark size="sm" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-body font-bold text-ink-primary">
@@ -459,11 +472,14 @@ function MoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
                   "flex min-h-12 items-center gap-3 rounded-control px-3 text-body font-semibold",
                   active
                     ? "bg-accent-weak text-accent-ink"
-                    : "text-ink-primary hover:bg-surface-sunken",
+                    : "text-ink-primary hover:bg-surface-hover",
                 )}
               >
                 <item.icon
-                  className="size-5 text-ink-secondary"
+                  className={cn(
+                    "size-5",
+                    active ? "text-accent-ink" : "text-ink-secondary",
+                  )}
                   aria-hidden="true"
                 />
                 {item.label}

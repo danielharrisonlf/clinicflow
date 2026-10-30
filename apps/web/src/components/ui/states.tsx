@@ -204,7 +204,7 @@ export function CardsSkeleton({
         {Array.from({ length: cards }, (_, index) => (
           <div
             key={index}
-            className="rounded-card border border-border-subtle bg-surface-base p-4"
+            className="rounded-card border border-border-subtle bg-surface-base p-4 shadow-panel"
           >
             <div className="skeleton h-4 w-24" />
             <div className="skeleton mt-3 h-5 w-48" />

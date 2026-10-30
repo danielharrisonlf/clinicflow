@@ -1,17 +1,23 @@
 @import "tailwindcss";
-@import "@fontsource/atkinson-hyperlegible-mono/latin-400.css";
-@import "@fontsource/atkinson-hyperlegible-mono/latin-600.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
-/* Fluent 2 como fundação de cor, tipografia e forma, adaptado ao fluxo clínico.
-   Os valores correspondentes ao tema oficial são aplicados por fluent-theme.ts;
-   estes valores mantêm a primeira pintura e a landing estáveis. */
+/* Sistema "Cockpit" (DESIGN.md). Todos os tokens vivem aqui: não existe tema
+   em runtime — estilo inline no <html> venceria este arquivo e tornaria o
+   sistema inauditável. Claro no @theme; escuro só redefine tokens, abaixo. */
 
 @theme {
-  /* Superfícies frias e área de trabalho branca. */
+  /* Superfícies slate: o app é o fundo, o card é a superfície de trabalho. */
+  --color-surface-app: #f8fafc;
   --color-surface-base: #ffffff;
-  --color-surface-app: #f1f6fa;
-  --color-surface-sunken: #e9f2f8;
-  --color-surface-raised: #fafafa;
+  /* Menu, segmento ativo: no claro a elevação vem da shadow-raised. */
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #f1f5f9;
+  /* Vidro só em camada sobreposta (folha, diálogo, paleta, header móvel),
+     sempre com backdrop-blur-md. Nunca em card em repouso. */
+  --color-surface-glass: rgb(255 255 255 / 0.72);
+  /* Hover translúcido: funciona igual sobre base, raised e sunken. */
+  --color-surface-hover: rgb(15 23 42 / 0.05);
   --color-surface-marketing: #eaf4fb;
   --color-surface-marketing-soft: #f3f8fc;
   --color-ink-marketing: #172c3e;
@@ -42,63 +48,73 @@
   --color-marketing-shadow-strong: rgb(25 64 94 / 0.16);
   --color-marketing-shadow-card: rgb(25 64 94 / 0.08);
   --color-marketing-shadow-peach: rgb(25 64 94 / 0.08);
-  --color-scrim: rgb(9 28 45 / 0.48);
+  /* Fundo atrás de diálogo e folha; o vidro da camada desfoca por cima dele. */
+  --color-scrim: rgb(2 6 23 / 0.24);
 
-  --color-border-subtle: #e0e0e0;
-  --color-border-default: #d1d1d1;
-  /* Contorno de campo: 3:1 contra o branco, para o campo existir sem foco. */
-  --color-border-strong: #8794a3;
+  /* Micro-borda de card; divisória forte; contorno de campo. */
+  --color-border-subtle: rgb(226 232 240 / 0.8);
+  --color-border-default: #cbd5e1;
+  --color-border-strong: #8392a7;
 
-  --color-ink-primary: #242424;
-  --color-ink-secondary: #424242;
-  --color-ink-tertiary: #616161;
+  --color-ink-primary: #0f172a;
+  --color-ink-secondary: #334155;
+  --color-ink-tertiary: #5b6b82;
   --color-ink-onaccent: #ffffff;
 
-  /* Ação e seleção Fluent brand: azul é reservado para interação. */
-  --color-accent: #0f6cbd;
-  --color-accent-hover: #115ea3;
-  --color-accent-active: #0c3b5e;
-  --color-accent-weak: #ebf3fc;
-  --color-accent-ink: #0f6cbd;
+  /* Azul é ação: primário, seleção e foco. Nunca enfeite. */
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-active: #1e40af;
+  --color-accent-weak: #eff6ff;
+  --color-accent-ink: #1d4ed8;
 
-  /* Semânticas de feedback */
-  --color-danger: #b42318;
-  --color-danger-hover: #a4262c;
-  --color-danger-weak: #fdf6f6;
-  --color-danger-fill: #b42318;
-  --color-danger-fill-hover: #a4262c;
-  --color-warning: #7a4300;
-  --color-warning-weak: #fff4dc;
-  --color-warning-strong: #ffe7b8;
-  --color-success: #2f6b3f;
-  --color-success-weak: #e5f2e8;
-  --color-info: #1d4fb8;
-  --color-info-weak: #e6eefc;
+  /* Esmeralda: receita, sucesso, confirmado. `success` é o mesmo papel. */
+  --color-revenue: #047857;
+  --color-revenue-weak: #ecfdf5;
+  --color-success: var(--color-revenue);
+  --color-success-weak: var(--color-revenue-weak);
+
+  /* Rosa: risco, atraso, destrutivo. `danger-fill` carrega texto branco. */
+  --color-danger: #be123c;
+  --color-danger-hover: #9f1239;
+  --color-danger-weak: #fff1f2;
+  --color-danger-fill: #be123c;
+  --color-danger-fill-hover: #9f1239;
+
+  /* Âmbar: atenção e espera. Nunca tinta de texto pequeno sobre claro além
+     do tom 800 abaixo. */
+  --color-warning: #92400e;
+  --color-warning-weak: #fffbeb;
+  --color-warning-strong: #fef3c7;
+
+  /* Aviso neutro: família do acento. */
+  --color-info: var(--color-accent-ink);
+  --color-info-weak: var(--color-accent-weak);
 
   /* Estados clínicos da consulta: um matiz por estado, mais um ícone no selo,
      para que cor nunca seja o único sinal. */
-  --color-state-agendada: #4f5b66;
-  --color-state-agendada-weak: #eef1f3;
-  --color-state-confirmada: #1d4fb8;
-  --color-state-confirmada-weak: #e6eefc;
-  --color-state-espera: #7a4300;
-  --color-state-espera-weak: #ffe7b8;
-  --color-state-atendimento: #5b34b0;
-  --color-state-atendimento-weak: #efe9fb;
-  --color-state-concluida: #2f6b3f;
-  --color-state-concluida-weak: #e5f2e8;
-  --color-state-cancelada: #5e6964;
-  --color-state-cancelada-weak: #eef0ef;
-  --color-state-atrasada: #b42318;
-  --color-state-atrasada-weak: #fde8e6;
+  --color-state-agendada: #475569;
+  --color-state-agendada-weak: #f1f5f9;
+  --color-state-confirmada: #1d4ed8;
+  --color-state-confirmada-weak: #dbeafe;
+  --color-state-espera: #92400e;
+  --color-state-espera-weak: #fef3c7;
+  --color-state-atendimento: #6d28d9;
+  --color-state-atendimento-weak: #ede9fe;
+  --color-state-concluida: #047857;
+  --color-state-concluida-weak: #d1fae5;
+  --color-state-cancelada: #5b6b82;
+  --color-state-cancelada-weak: #f1f5f9;
+  --color-state-atrasada: #be123c;
+  --color-state-atrasada-weak: #ffe4e6;
 
-  /* Segoe UI do Fluent; Atkinson Mono para horas, telefones e contagens. */
+  /* Geist na interface; Geist Mono em hora, telefone, CPF e contagens.
+     Auto-hospedadas (fontsource), sem chamada a serviço externo. */
   --font-sans:
-    "Segoe UI", "Segoe UI Web (West European)", -apple-system,
-    BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
+    "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
   --font-mono:
-    "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, Consolas,
-    monospace;
+    "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Escala fixa, razão ~1.2. Corpo a 15px: 8h de leitura a 70cm. */
   --text-hero: 40px;
@@ -127,18 +143,21 @@
   --text-input-touch: 16px;
   --text-input-touch--line-height: 1.4;
 
-  --radius-marker: 4px;
-  --radius-control: 4px;
-  --radius-raised: 6px;
-  --radius-card: 8px;
-  --radius-modal: 8px;
+  /* Selo e kbd · botão, campo, segmento · menu, aviso · painel, stat card ·
+     diálogo, folha. Selo de estado é pílula (rounded-full). */
+  --radius-marker: 6px;
+  --radius-control: 8px;
+  --radius-raised: 10px;
+  --radius-card: 12px;
+  --radius-modal: 16px;
 
-  /* Elevação: deslocamento + difusão, nunca halo colorido. */
-  --shadow-panel: 0 1px 2px 0 rgb(13 48 79 / 0.05);
+  /* Elevação no claro: difusa, duas camadas, sempre com deslocamento. */
+  --shadow-panel:
+    0 1px 2px rgb(2 6 23 / 0.04), 0 8px 24px -12px rgb(2 6 23 / 0.12);
   --shadow-raised:
-    0 1px 2px 0 rgb(13 48 79 / 0.07), 0 6px 16px -4px rgb(13 48 79 / 0.12);
+    0 2px 4px rgb(2 6 23 / 0.06), 0 16px 32px -16px rgb(2 6 23 / 0.18);
   --shadow-overlay:
-    0 2px 4px 0 rgb(13 48 79 / 0.08), 0 18px 48px -12px rgb(13 48 79 / 0.28);
+    0 8px 16px rgb(2 6 23 / 0.1), 0 32px 64px -24px rgb(2 6 23 / 0.28);
 
   /* Larguras estruturais da casca */
   --spacing-rail: 84px;
@@ -153,6 +172,21 @@
   --animate-pop: pop 160ms var(--ease-out-quart);
   --animate-fade: fade 160ms ease-out;
   --animate-toast: toast-in 200ms var(--ease-out-quart);
+  /* Dot do que está vivo agora (CHECK_IN, EM_ATENDIMENTO, ATRASADA, crítico).
+     Com prefers-reduced-motion vira dot estático (regra em `base`). */
+  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
 }
 
 @keyframes sheet-up {
@@ -198,58 +232,75 @@
 
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --color-surface-base: #292929;
-    --color-surface-app: #111d2a;
-    --color-surface-sunken: #273744;
-    --color-surface-raised: #292929;
+    /* Elevação por luminosidade: quanto mais perto, mais claro. Nada de
+       preto puro (#000) nem branco puro no texto. */
+    --color-surface-app: #020617;
+    --color-surface-base: #0f172a;
+    --color-surface-raised: #1e293b;
+    --color-surface-sunken: #0b1120;
+    --color-surface-glass: rgb(15 23 42 / 0.75);
+    --color-surface-hover: rgb(255 255 255 / 0.06);
     --color-scrim: rgb(0 0 0 / 0.6);
 
-    --color-border-subtle: #525252;
-    --color-border-default: #666666;
-    --color-border-strong: #8794a3;
+    --color-border-subtle: rgb(255 255 255 / 0.08);
+    --color-border-default: rgb(255 255 255 / 0.14);
+    --color-border-strong: #64748b;
 
-    --color-ink-primary: #ffffff;
-    --color-ink-secondary: #d6d6d6;
-    --color-ink-tertiary: #adadad;
+    --color-ink-primary: #e2e8f0;
+    --color-ink-secondary: #94a3b8;
+    --color-ink-tertiary: #8796ab;
     --color-ink-onaccent: #ffffff;
 
-    --color-accent: #115ea3;
-    --color-accent-hover: #0f6cbd;
-    --color-accent-active: #0c3b5e;
-    --color-accent-weak: #082338;
-    --color-accent-ink: #62abf5;
+    --color-accent: #2563eb;
+    --color-accent-hover: #1d4ed8;
+    --color-accent-active: #1e40af;
+    --color-accent-weak: #172554;
+    --color-accent-ink: #60a5fa;
 
-    --color-danger: #e37d80;
-    --color-danger-hover: #ef999b;
-    --color-danger-weak: #3f1011;
-    --color-danger-fill: #b42318;
-    --color-danger-fill-hover: #a4262c;
-    --color-warning: #ffc56b;
-    --color-warning-weak: #2e220b;
-    --color-warning-strong: #3a2a0c;
-    --color-success: #86cf98;
-    --color-success-weak: #17301e;
-    --color-info: #8db0ff;
-    --color-info-weak: #18284a;
+    --color-revenue: #34d399;
+    --color-revenue-weak: #064e3b;
 
-    --color-state-agendada: #aab4bd;
-    --color-state-agendada-weak: #232b2e;
-    --color-state-confirmada: #8db0ff;
-    --color-state-confirmada-weak: #18284a;
-    --color-state-espera: #ffc56b;
-    --color-state-espera-weak: #3a2a0c;
-    --color-state-atendimento: #c2a8ff;
-    --color-state-atendimento-weak: #2a2045;
-    --color-state-concluida: #86cf98;
-    --color-state-concluida-weak: #17301e;
-    --color-state-cancelada: #8a9690;
-    --color-state-cancelada-weak: #212927;
-    --color-state-atrasada: #ff8f85;
-    --color-state-atrasada-weak: #3d1714;
+    --color-danger: #fb7185;
+    --color-danger-hover: #fda4af;
+    --color-danger-weak: #4c0519;
+    /* O preenchimento destrutivo carrega texto branco nos dois temas. */
+    --color-danger-fill: #be123c;
+    --color-danger-fill-hover: #e11d48;
+    --color-warning: #fcd34d;
+    --color-warning-weak: #451a03;
+    --color-warning-strong: #78350f;
 
-    --shadow-panel: 0 1px 2px 0 rgb(0 0 0 / 0.4);
-    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 18px rgb(0 0 0 / 0.4);
-    --shadow-overlay: 0 2px 4px rgb(0 0 0 / 0.4), 0 20px 50px rgb(0 0 0 / 0.6);
+    --color-state-agendada: #94a3b8;
+    --color-state-agendada-weak: #1e293b;
+    --color-state-confirmada: #93c5fd;
+    --color-state-confirmada-weak: #172554;
+    --color-state-espera: #fcd34d;
+    --color-state-espera-weak: #451a03;
+    --color-state-atendimento: #c4b5fd;
+    --color-state-atendimento-weak: #2e1065;
+    --color-state-concluida: #6ee7b7;
+    --color-state-concluida-weak: #064e3b;
+    --color-state-cancelada: #94a3b8;
+    --color-state-cancelada-weak: #1e293b;
+    --color-state-atrasada: #fda4af;
+    --color-state-atrasada-weak: #4c0519;
+
+    /* No escuro sombra não aparece: card em repouso fica só com a micro-borda;
+       sombra existe apenas sob o que flutua (menu, toast, diálogo). */
+    --shadow-panel: 0 0 #0000;
+    --shadow-raised:
+      0 2px 4px rgb(0 0 0 / 0.3), 0 16px 32px -16px rgb(0 0 0 / 0.6);
+    --shadow-overlay:
+      0 8px 16px rgb(0 0 0 / 0.35), 0 32px 64px -24px rgb(0 0 0 / 0.7);
+  }
+
+  /* Trocar de tema é troca de token, não animação: sem isto, todo controle
+     com transição de cor pisca durante a troca. */
+  :root[data-theme-switching] *,
+  :root[data-theme-switching] *::before,
+  :root[data-theme-switching] *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: precisa vencer as utilitárias */
+    transition: none !important;
   }
 }
 
@@ -346,6 +397,12 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
       /* biome-ignore-end lint/complexity/noImportantStyles: precisa vencer as utilitárias */
+    }
+
+    /* O pulso dos dots vira dot estático, opaco e no tamanho cheio. */
+    .animate-pulse-dot {
+      /* biome-ignore lint/complexity/noImportantStyles: precisa vencer a utilitária */
+      animation: none !important;
     }
   }
 }

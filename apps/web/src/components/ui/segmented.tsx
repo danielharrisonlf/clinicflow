@@ -37,7 +37,8 @@ export function SegmentedControl<T extends string>({
   return (
     <fieldset
       className={cn(
-        "relative inline-flex min-w-0 max-w-full gap-0.5 overflow-x-auto rounded-control border border-border-default bg-surface-base p-0.5",
+        // Trilho afundado; o segmento ativo sobe (surface-raised + sombra).
+        "relative inline-flex min-w-0 max-w-full gap-0.5 overflow-x-auto rounded-control border border-border-subtle bg-surface-sunken p-0.5",
         "[scrollbar-width:none]",
         className,
       )}
@@ -54,7 +55,7 @@ export function SegmentedControl<T extends string>({
               size === "sm" ? "h-7 text-label" : "h-8 text-label",
               "pointer-coarse:min-h-10",
               active
-                ? "bg-accent-weak text-accent-ink"
+                ? "bg-surface-raised text-ink-primary shadow-raised"
                 : "text-ink-secondary hover:text-ink-primary",
             )}
           >
@@ -78,7 +79,7 @@ export function SegmentedControl<T extends string>({
                       ? "bg-warning-weak text-warning"
                       : active
                         ? "bg-surface-sunken text-ink-secondary"
-                        : "text-ink-tertiary",
+                        : "text-ink-secondary",
                 )}
               >
                 {option.count}

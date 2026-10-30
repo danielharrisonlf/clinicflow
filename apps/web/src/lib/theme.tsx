@@ -6,7 +6,6 @@ import {
   useMemo,
   useState,
 } from "react";
-import { applyFluentTheme } from "./fluent-theme";
 
 export type ThemePreference = "light" | "dark" | "system";
 
@@ -54,12 +53,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // O atributo sempre carrega o tema resolvido: o CSS tem um único bloco de
   // tokens escuros, e "sistema" é resolvido aqui (e no script de index.html).
+  // Os tokens vivem só no CSS: nada de estilo inline no <html>.
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", resolved);
-    applyFluentTheme(resolved);
-    const appSurface = getComputedStyle(document.documentElement)
+    const root = document.documentElement;
+    const switching = root.getAttribute("data-theme") !== resolved;
+    // Troca de tema não anima: as transições de cor ficam desligadas até o
+    // navegador recalcular o estilo com os tokens novos.
+    if (switching) root.setAttribute("data-theme-switching", "");
+    root.setAttribute("data-theme", resolved);
+    const appSurface = getComputedStyle(root)
       .getPropertyValue("--color-surface-app")
       .trim();
+    if (switching) {
+      window.setTimeout(() => root.removeAttribute("data-theme-switching"), 0);
+    }
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", appSurface);

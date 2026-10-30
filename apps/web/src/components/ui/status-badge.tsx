@@ -11,14 +11,14 @@ import {
 } from "lucide-react";
 import type { DerivedState } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
+import { Dot } from "./badge";
 
 /**
  * Selo de estado. Espelha a máquina de estados da consulta um para um.
  *
  * Cada estado tem matiz e ícone próprios: cor nunca é o único sinal (daltonismo,
- * monitor velho no balcão). Só CHECK_IN é preenchido forte, porque é o único
- * estado que pede ação imediata — se todos gritassem, nenhum chamaria atenção.
- * Concluída e cancelada recuam: já saíram da fila de trabalho.
+ * monitor velho no balcão). Agendada é só contorno; os demais têm fundo
+ * tingido. Concluída e cancelada recuam em tons frios: já saíram da fila.
  */
 const STATE_STYLE: Record<DerivedState, string> = {
   AGENDADA: "text-state-agendada border-border-default bg-transparent",
@@ -32,6 +32,16 @@ const STATE_STYLE: Record<DerivedState, string> = {
   REAGENDADA: "text-state-cancelada border-transparent bg-state-cancelada-weak",
   ATRASADA: "text-state-atrasada border-transparent bg-state-atrasada-weak",
 };
+
+/**
+ * O dot pulsa só no que está acontecendo agora: paciente esperando, em
+ * atendimento e atrasada. Com prefers-reduced-motion vira dot estático.
+ */
+export const LIVE_STATES: ReadonlySet<DerivedState> = new Set<DerivedState>([
+  "CHECK_IN",
+  "EM_ATENDIMENTO",
+  "ATRASADA",
+]);
 
 export const STATE_LABEL: Record<DerivedState, string> = {
   AGENDADA: "Agendada",
@@ -83,12 +93,13 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border font-semibold",
-        size === "sm" ? "h-5 px-1.5 text-micro" : "h-6 px-2 text-micro",
+        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border font-semibold",
+        size === "sm" ? "h-5 px-2 text-micro" : "h-6 px-2.5 text-micro",
         STATE_STYLE[state],
         className,
       )}
     >
+      <Dot pulse={LIVE_STATES.has(state)} />
       <Icon
         className="size-3.5 shrink-0"
         strokeWidth={2.25}

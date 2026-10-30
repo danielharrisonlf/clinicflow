@@ -9,7 +9,7 @@ import {
 const shotsDirectory = join(process.cwd(), "shots", "redesign", "after");
 
 const routes = [
-  { name: "dashboard", path: "/", heading: "Painel do dia" },
+  { name: "dashboard", path: "/", heading: "Cockpit do dia" },
   { name: "agenda", path: "/agenda", heading: "Agenda" },
   { name: "waiting-room", path: "/sala-de-espera", heading: "Sala de espera" },
   {

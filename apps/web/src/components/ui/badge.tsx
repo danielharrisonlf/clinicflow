@@ -13,6 +13,7 @@ const badgeVariants = cva(
         warning: "bg-warning-weak text-warning",
         danger: "bg-danger-weak text-danger",
         success: "bg-success-weak text-success",
+        revenue: "bg-revenue-weak text-revenue",
         info: "bg-info-weak text-info",
         outline: "border border-border-default text-ink-secondary",
       },
@@ -34,5 +35,32 @@ export function Badge({
 }: React.HTMLAttributes<HTMLSpanElement> & VariantProps<typeof badgeVariants>) {
   return (
     <span className={cn(badgeVariants({ tone, size }), className)} {...props} />
+  );
+}
+
+/**
+ * Dot de estado. A cor vem do texto do pai (`bg-current`), então o dot herda
+ * o matiz do selo ou do rótulo em que está. `pulse` só para o que está vivo
+ * agora (paciente esperando, em atendimento, atrasada, crítico): se tudo
+ * pulsasse, nada chamaria atenção. Decorativo — o texto ao lado carrega o
+ * significado.
+ */
+export function Dot({
+  pulse = false,
+  className,
+}: {
+  pulse?: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      data-pulse={pulse || undefined}
+      className={cn(
+        "inline-block size-1.5 shrink-0 rounded-full bg-current",
+        pulse && "animate-pulse-dot",
+        className,
+      )}
+    />
   );
 }

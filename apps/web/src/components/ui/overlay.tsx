@@ -191,7 +191,9 @@ export function Overlay({
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
         className={cn(
-          "relative flex max-h-[92dvh] w-full flex-col border border-border-default bg-surface-base shadow-overlay outline-none",
+          // Camada sobreposta: o único lugar (com a paleta e o header móvel)
+          // onde o vidro entra.
+          "relative flex max-h-[92dvh] w-full flex-col border border-border-subtle bg-surface-glass shadow-overlay outline-none backdrop-blur-md",
           "rounded-t-modal animate-sheet-up",
           sheet
             ? "sm:h-dvh sm:max-h-dvh sm:w-panel sm:max-w-[calc(100vw-2rem)] sm:rounded-none sm:rounded-l-modal sm:animate-sheet-left"

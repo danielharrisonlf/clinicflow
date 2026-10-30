@@ -292,9 +292,10 @@ function Palette({ onClose }: { onClose: () => void }) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
+        // A vitrine do vidro: camada sobreposta, surface-glass + blur.
         className={cn(
-          "relative flex h-dvh w-full flex-col overflow-hidden bg-surface-base shadow-overlay outline-none animate-sheet-up",
-          "sm:h-auto sm:max-h-[min(36rem,80dvh)] sm:max-w-xl sm:rounded-modal sm:border sm:border-border-default sm:animate-pop",
+          "relative flex h-dvh w-full flex-col overflow-hidden bg-surface-glass shadow-overlay outline-none backdrop-blur-md animate-sheet-up",
+          "sm:h-auto sm:max-h-[min(36rem,80dvh)] sm:max-w-xl sm:rounded-modal sm:border sm:border-border-subtle sm:animate-pop",
         )}
       >
         <h2 id={titleId} className="sr-only">
@@ -421,7 +422,7 @@ function Palette({ onClose }: { onClose: () => void }) {
                           "mx-1.5 flex cursor-pointer items-center gap-3 rounded-control px-2.5 py-2 pointer-coarse:min-h-12",
                           selected
                             ? "bg-accent-weak"
-                            : "bg-transparent hover:bg-surface-app",
+                            : "bg-transparent hover:bg-surface-hover",
                         )}
                       >
                         <Icon

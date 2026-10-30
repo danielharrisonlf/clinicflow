@@ -82,10 +82,10 @@ export function Pagination({
                 aria-label={`Página ${page}`}
                 aria-current={page === meta.page ? "page" : undefined}
                 className={cn(
-                  "flex size-9 items-center justify-center rounded-control border text-label transition-colors",
+                  "flex size-9 items-center justify-center rounded-control border font-mono text-label transition-colors",
                   page === meta.page
-                    ? "border-ink-primary bg-surface-base font-semibold text-ink-primary"
-                    : "border-border-default bg-surface-base text-ink-secondary hover:border-border-strong hover:text-ink-primary",
+                    ? "border-transparent bg-accent-weak font-semibold text-accent-ink"
+                    : "border-border-default bg-surface-base text-ink-secondary hover:border-border-strong hover:bg-surface-hover hover:text-ink-primary",
                 )}
               >
                 {page}
