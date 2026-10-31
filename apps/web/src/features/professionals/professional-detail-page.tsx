@@ -259,16 +259,16 @@ export function ProfessionalDetailPage() {
                       from: currentPath(location),
                       backgroundLocation: location,
                     }}
-                    className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 px-4 py-3 transition-colors hover:bg-surface-app sm:grid-cols-[4rem_minmax(0,1fr)_auto] md:px-5"
+                    className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 px-4 py-3 transition-colors hover:bg-surface-hover sm:grid-cols-[4rem_minmax(0,1fr)_auto] md:px-5"
                   >
-                    <span className="font-mono text-card font-semibold text-ink-primary">
+                    <span className="font-mono tabular-nums text-card font-semibold text-ink-primary">
                       {slot.time}
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-body font-semibold text-ink-primary">
                         {slot.patientName}
                       </span>
-                      <span className="block font-mono text-label text-ink-secondary">
+                      <span className="block font-mono tabular-nums text-label text-ink-secondary">
                         {slot.durationMinutes} min
                       </span>
                     </span>
@@ -322,7 +322,7 @@ export function ProfessionalDetailPage() {
                     {
                       label: "Consultas hoje",
                       value: (
-                        <span className="font-mono">
+                        <span className="font-mono tabular-nums">
                           {p.todayAppointmentsCount}
                         </span>
                       ),
@@ -330,13 +330,15 @@ export function ProfessionalDetailPage() {
                     {
                       label: "Pendências abertas",
                       value: (
-                        <span className="font-mono">{p.openTasksCount}</span>
+                        <span className="font-mono tabular-nums">
+                          {p.openTasksCount}
+                        </span>
                       ),
                     },
                     {
                       label: "Duração padrão da consulta",
                       value: (
-                        <span className="font-mono">
+                        <span className="font-mono tabular-nums">
                           {p.defaultDurationMinutes} min
                         </span>
                       ),
@@ -397,7 +399,7 @@ function ScheduleTable({
                 <span className="sr-only"> (dia exibido na agenda)</span>
               ) : null}
             </th>
-            <td className="px-2 py-2.5 font-mono text-ink-primary">
+            <td className="px-2 py-2.5 font-mono tabular-nums text-ink-primary">
               {window.startTime}–{window.endTime}
             </td>
             {hasRoom ? (

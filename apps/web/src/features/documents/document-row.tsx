@@ -26,10 +26,13 @@ export function DocumentRow({
   return (
     <article
       aria-label={doc.fileName}
-      className="flex flex-col gap-3 px-4 py-3 transition-colors hover:bg-surface-app sm:flex-row sm:items-center sm:gap-4 md:px-5"
+      className="flex flex-col gap-3 px-4 py-3 transition-colors hover:bg-surface-hover sm:flex-row sm:items-center sm:gap-4 md:px-5"
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">
-        <Badge tone="outline" className="mt-0.5 w-12 justify-center font-mono">
+        <Badge
+          tone="outline"
+          className="mt-0.5 w-12 justify-center font-mono tabular-nums"
+        >
           {doc.format}
         </Badge>
         <div className="min-w-0 flex-1">
@@ -49,8 +52,10 @@ export function DocumentRow({
                 {doc.patientName}
               </Link>
             ) : null}
-            <span className="font-mono text-ink-tertiary">{doc.sizeLabel}</span>
-            <span className="font-mono text-ink-tertiary">
+            <span className="font-mono tabular-nums text-ink-tertiary">
+              {doc.sizeLabel}
+            </span>
+            <span className="font-mono tabular-nums text-ink-tertiary">
               {formatDate(doc.createdAt)}
             </span>
             {doc.source ? (

@@ -321,7 +321,7 @@ function PatientResults({
             onClick={() =>
               onPick({ id: item.id, name: item.name, phone: item.phone })
             }
-            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-app pointer-coarse:min-h-11"
+            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-hover pointer-coarse:min-h-11"
           >
             <span className="min-w-0 truncate text-body font-semibold text-ink-primary">
               {item.name}

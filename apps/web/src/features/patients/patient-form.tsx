@@ -278,7 +278,7 @@ export function PatientForm({
           autoComplete="off"
           placeholder="(11) 98765-4321"
           hint="Com DDD. É para onde vai a confirmação da consulta."
-          className="font-mono"
+          className="font-mono tabular-nums"
           value={values.phone}
           error={errorFor("phone")}
           onChange={(event) => set("phone", event.target.value)}
@@ -292,7 +292,7 @@ export function PatientForm({
           type="date"
           max={todayISO()}
           min="1900-01-01"
-          className="font-mono"
+          className="font-mono tabular-nums"
           value={values.birthDate}
           error={errorFor("birthDate")}
           onChange={(event) => set("birthDate", event.target.value)}
@@ -313,7 +313,7 @@ export function PatientForm({
           autoComplete="off"
           placeholder="000.000.000-00"
           hint="Opcional. Evita cadastro duplicado."
-          className="font-mono"
+          className="font-mono tabular-nums"
           value={values.cpf}
           error={errorFor("cpf")}
           onChange={(event) => set("cpf", formatCpf(event.target.value))}

@@ -1,10 +1,34 @@
 import { BrandMark } from "@/components/layout/brand";
+import { Dot } from "@/components/ui/badge";
 import { useDocumentTitle } from "@/components/ui/page";
 
 /**
- * Moldura das telas de acesso. O painel da marca é a única superfície do
- * produto que não está a serviço de uma tarefa — e mesmo assim é curto: quem
- * chega aqui quer entrar, não ler.
+ * Pilares do produto no painel da marca. Só o que o sistema faz — nenhum
+ * número: a interface não inventa métrica, nem na vitrine.
+ */
+const PILLARS = [
+  {
+    label: "Sala de espera ao vivo",
+    dot: "text-amber-300",
+    pulse: true,
+  },
+  {
+    label: "Confirmação pelo WhatsApp antes da consulta",
+    dot: "text-emerald-400",
+    pulse: false,
+  },
+  {
+    label: "Resgate de faltas e retornos a agendar",
+    dot: "text-rose-400",
+    pulse: false,
+  },
+];
+
+/**
+ * Moldura das telas de acesso. O painel da marca é a vitrine do Cockpit:
+ * sempre escuro (slate-950), nos dois temas — por isso usa a paleta slate
+ * direto em vez dos tokens, que seguem o tema do `<html>`. O formulário, ao
+ * lado, continua no tema corrente. Curto: quem chega aqui quer entrar.
  */
 export function AuthLayout({
   title,
@@ -18,31 +42,42 @@ export function AuthLayout({
   useDocumentTitle(title);
 
   return (
-    <div className="grid min-h-dvh grid-cols-1 bg-surface-app lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-      <aside className="hidden flex-col justify-between px-12 py-12 lg:flex">
+    <div className="grid min-h-dvh grid-cols-1 bg-surface-base lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+      <aside className="hidden flex-col justify-between bg-slate-950 px-12 py-12 text-slate-200 lg:flex">
         <div className="flex items-center gap-3">
           <BrandMark size="lg" />
-          <span className="text-section font-bold tracking-tight text-ink-primary">
+          <span className="text-section font-bold tracking-tight text-slate-100">
             ClinicFlow
           </span>
         </div>
 
         <div className="max-w-md">
-          <p className="text-hero font-bold tracking-tight text-balance text-ink-primary">
-            Do agendamento ao retorno, num fluxo só.
+          <p className="text-hero font-bold tracking-tight text-balance text-slate-50">
+            Quem chegou, quem pode faltar e o próximo clique.
           </p>
-          <p className="mt-4 text-card text-ink-secondary">
-            Agenda, sala de espera e pendências na mesma tela. Quem está no
-            balcão vê quem chegou sem trocar de aba.
+          <p className="mt-4 text-card text-slate-400">
+            Agenda, sala de espera e resgate de faltas num só cockpit. Quem está
+            no balcão vê o dia inteiro sem trocar de aba.
           </p>
+          <ul className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6">
+            {PILLARS.map((pillar) => (
+              <li
+                key={pillar.label}
+                className="flex items-center gap-2.5 text-body text-slate-300"
+              >
+                <Dot pulse={pillar.pulse} className={`size-2 ${pillar.dot}`} />
+                {pillar.label}
+              </li>
+            ))}
+          </ul>
         </div>
 
-        <p className="text-label text-ink-tertiary">
+        <p className="text-label text-slate-400">
           Acesso restrito à equipe da clínica.
         </p>
       </aside>
 
-      <main className="flex flex-col items-center justify-center bg-surface-base px-5 py-10 sm:px-8 lg:border-l lg:border-border-subtle">
+      <main className="flex flex-col items-center justify-center bg-surface-base px-5 py-10 sm:px-8">
         <div className="mb-8 flex items-center gap-2.5 lg:hidden">
           <BrandMark />
           <span className="text-section font-bold tracking-tight text-ink-primary">

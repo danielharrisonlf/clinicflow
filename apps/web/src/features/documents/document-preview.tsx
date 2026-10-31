@@ -129,11 +129,11 @@ export function DocumentPreview({
         <dl className="mt-4 flex flex-wrap gap-x-5 gap-y-1 border-t border-border-subtle pt-3 text-label text-ink-secondary">
           <div className="flex gap-1">
             <dt>Formato:</dt>
-            <dd className="font-mono">{doc.format}</dd>
+            <dd className="font-mono tabular-nums">{doc.format}</dd>
           </div>
           <div className="flex gap-1">
             <dt>Tamanho:</dt>
-            <dd className="font-mono">{doc.sizeLabel}</dd>
+            <dd className="font-mono tabular-nums">{doc.sizeLabel}</dd>
           </div>
           {doc.source ? (
             <div className="flex gap-1">

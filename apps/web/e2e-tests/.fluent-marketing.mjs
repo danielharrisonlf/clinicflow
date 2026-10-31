@@ -10,7 +10,7 @@ import {
 const output = "../../out/visual-refresh/marketing";
 mkdirSync(output, { recursive: true });
 const routes = [
-  ["painel", "/", "Painel do dia"],
+  ["painel", "/", "Cockpit do dia"],
   ["agenda", "/agenda", "Agenda"],
   ["espera", "/sala-de-espera", "Sala de espera"],
   ["retornos", "/pendencias", "Pendências e retornos"],

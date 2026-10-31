@@ -8,10 +8,13 @@ import {
 import {
   CalendarClock,
   CalendarPlus,
+  CalendarX,
+  ChevronLeft,
   ChevronRight,
   ClipboardCheck,
   FileText,
   FileUp,
+  Mail,
   MessageCircle,
   Pencil,
   Phone,
@@ -22,7 +25,7 @@ import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button, ButtonAnchor, ButtonLink } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader, useDocumentTitle } from "@/components/ui/page";
 import { clampPage, Pagination } from "@/components/ui/pagination";
 import { TabPanel, Tabs } from "@/components/ui/segmented";
 import {
@@ -32,8 +35,14 @@ import {
   RowsSkeleton,
   TextSkeleton,
 } from "@/components/ui/states";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { DescriptionList, Panel, PanelHeader } from "@/components/ui/surface";
+import { STATE_SOLID, StatusBadge } from "@/components/ui/status-badge";
+import {
+  Avatar,
+  DescriptionList,
+  Panel,
+  PanelHeader,
+  StatTile,
+} from "@/components/ui/surface";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import { patientsApi, tasksApi } from "@/lib/api/endpoints";
@@ -45,11 +54,11 @@ import {
   APPOINTMENT_TYPE_LABEL,
   formatDate,
   formatRelative,
-  TASK_TYPE_LABEL,
 } from "../appointments/labels";
 import { DocumentPreview } from "../documents/document-preview";
 import { DocumentRow } from "../documents/document-row";
 import { DocumentUpload } from "../documents/document-upload";
+import { TaskTypeTag } from "../tasks/task-type";
 import { ageLabel, formatCpf } from "./patient-format";
 
 type Tab = "consultas" | "documentos" | "pendencias";
@@ -113,40 +122,26 @@ export function PatientDetailPage() {
 
   return (
     <>
-      <PageHeader
-        title={
-          p ? (
-            p.name
-          ) : (
-            <span className="skeleton inline-block h-8 w-64 max-w-full align-middle">
-              <span className="sr-only">Carregando paciente…</span>
-            </span>
-          )
-        }
-        documentTitle={p?.name ?? "Ficha do paciente"}
-        back={{ to: "/pacientes", label: "Pacientes" }}
-        meta={
-          p ? (
-            <p className="flex flex-wrap gap-x-4 gap-y-1 text-body text-ink-secondary">
-              {ageLabel(p.age) ? <span>{ageLabel(p.age)}</span> : null}
-              <span>Paciente desde {formatDate(p.createdAt)}</span>
-            </p>
-          ) : null
-        }
-        actions={p ? <HeaderActions patient={p} /> : null}
-      />
+      <PatientHero patient={p} />
 
+      {/* Alergia e observação clínica antes de qualquer outra coisa: quem abre a ficha não pode passar por cima. */}
       {p?.notes ? (
         <Callout
           tone="warning"
           title="Observações clínicas e alergias"
-          className="mb-5"
+          className="mb-4 border border-warning/30 px-4 py-3.5 md:px-5"
         >
-          <p className="whitespace-pre-line">{p.notes}</p>
+          <p className="text-card whitespace-pre-line">{p.notes}</p>
         </Callout>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start">
+      <SummaryBlock
+        summary={s}
+        error={summary.isError ? summary.error : null}
+        onRetry={() => void summary.refetch()}
+      />
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start">
         <Panel
           aria-labelledby="ficha-historico"
           className="xl:col-start-1 xl:row-start-1"
@@ -187,8 +182,8 @@ export function PatientDetailPage() {
           </TabPanel>
         </Panel>
         <aside
-          aria-label="Cadastro e resumo"
-          className="flex min-w-0 flex-col gap-5 xl:col-start-2 xl:row-start-1"
+          aria-label="Cadastro"
+          className="flex min-w-0 flex-col gap-4 xl:col-start-2 xl:row-start-1"
         >
           <Panel aria-labelledby="ficha-cadastro">
             <PanelHeader
@@ -209,14 +204,116 @@ export function PatientDetailPage() {
               {p ? <ContactList patient={p} /> : <TextSkeleton lines={4} />}
             </div>
           </Panel>
-          <SummaryBlock
-            summary={s}
-            error={summary.isError ? summary.error : null}
-            onRetry={() => void summary.refetch()}
-          />
         </aside>
       </div>
     </>
+  );
+}
+
+/**
+ * Cabeçalho-herói da ficha: quem é, como falar com a pessoa e o próximo
+ * clique (agendar). Contatos em mono, como todo número que se dita ao telefone.
+ */
+function PatientHero({ patient }: { patient?: PatientDetail }) {
+  useDocumentTitle(patient?.name ?? "Ficha do paciente");
+  const age = patient ? ageLabel(patient.age) : null;
+  return (
+    <header className="mb-4 flex flex-col gap-3">
+      <Link
+        to="/pacientes"
+        className="-ml-1 inline-flex w-fit items-center gap-0.5 rounded-marker px-1 py-0.5 text-label font-semibold text-ink-secondary transition-colors hover:text-ink-primary pointer-coarse:min-h-11"
+      >
+        <ChevronLeft className="size-4" aria-hidden="true" />
+        Pacientes
+      </Link>
+      <Panel
+        as="div"
+        className="flex flex-col gap-4 p-4 md:p-5 xl:flex-row xl:items-center xl:justify-between"
+      >
+        <div className="flex min-w-0 items-start gap-4">
+          {patient ? (
+            <Avatar
+              name={patient.name}
+              size="lg"
+              className="size-14 text-section max-sm:size-12 max-sm:text-card"
+            />
+          ) : (
+            <span className="skeleton size-14 shrink-0 rounded-full max-sm:size-12" />
+          )}
+          <div className="min-w-0">
+            <h1 className="text-entity font-semibold tracking-tight text-balance text-ink-primary">
+              {patient ? (
+                patient.name
+              ) : (
+                <span className="skeleton inline-block h-7 w-64 max-w-full align-middle">
+                  <span className="sr-only">Carregando paciente…</span>
+                </span>
+              )}
+            </h1>
+            {patient ? (
+              <>
+                <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-label text-ink-secondary">
+                  {age ? (
+                    <>
+                      <span>{age}</span>
+                      <span aria-hidden="true" className="text-ink-tertiary">
+                        ·
+                      </span>
+                    </>
+                  ) : null}
+                  <span>
+                    Paciente desde{" "}
+                    <span className="font-mono tabular-nums">
+                      {formatDate(patient.createdAt)}
+                    </span>
+                  </span>
+                </p>
+                <ul
+                  aria-label="Contatos"
+                  className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5 text-body"
+                >
+                  <li className="flex min-w-0 items-center gap-1.5">
+                    <Phone
+                      className="size-4 shrink-0 text-ink-tertiary"
+                      aria-hidden="true"
+                    />
+                    <a
+                      href={`tel:${phoneDigits(patient.phone)}`}
+                      className="inline-flex items-center rounded-marker font-mono tabular-nums text-ink-primary underline-offset-4 hover:text-accent-ink hover:underline pointer-coarse:min-h-11"
+                    >
+                      <span className="sr-only">Telefone: </span>
+                      {patient.phone}
+                    </a>
+                  </li>
+                  {patient.email ? (
+                    <li className="flex min-w-0 items-center gap-1.5">
+                      <Mail
+                        className="size-4 shrink-0 text-ink-tertiary"
+                        aria-hidden="true"
+                      />
+                      <a
+                        href={`mailto:${patient.email}`}
+                        className="inline-flex min-w-0 items-center truncate rounded-marker font-mono text-label text-ink-primary underline-offset-4 hover:text-accent-ink hover:underline pointer-coarse:min-h-11"
+                      >
+                        <span className="sr-only">E-mail: </span>
+                        {patient.email}
+                      </a>
+                    </li>
+                  ) : null}
+                </ul>
+              </>
+            ) : (
+              <span className="skeleton mt-2 block h-4 w-48 max-w-full" />
+            )}
+          </div>
+        </div>
+        {patient ? (
+          <div className="flex flex-wrap items-center gap-2 xl:shrink-0">
+            <HeaderActions patient={patient} />
+          </div>
+        ) : null}
+      </Panel>
+    </header>
   );
 }
 
@@ -262,41 +359,20 @@ function HeaderActions({ patient }: { patient: PatientDetail }) {
   );
 }
 
+/** Dados de cadastro de referência. Telefone e e-mail já estão no herói, com ação. */
 function ContactList({ patient }: { patient: PatientDetail }) {
   const missing = <span className="text-ink-tertiary">Não informado</span>;
   return (
     <DescriptionList
       columns={1}
-      className="sm:grid-cols-2 xl:grid-cols-1"
+      className="sm:grid-cols-3 xl:grid-cols-1"
       items={[
-        {
-          label: "Telefone / WhatsApp",
-          value: (
-            <a
-              href={`tel:${phoneDigits(patient.phone)}`}
-              className="font-mono text-ink-primary underline-offset-4 hover:underline"
-            >
-              {patient.phone}
-            </a>
-          ),
-        },
-        {
-          label: "E-mail",
-          value: patient.email ? (
-            <a
-              href={`mailto:${patient.email}`}
-              className="text-ink-primary underline-offset-4 hover:underline"
-            >
-              {patient.email}
-            </a>
-          ) : (
-            missing
-          ),
-        },
         {
           label: "CPF",
           value: patient.cpf ? (
-            <span className="font-mono">{formatCpf(patient.cpf)}</span>
+            <span className="font-mono tabular-nums">
+              {formatCpf(patient.cpf)}
+            </span>
           ) : (
             missing
           ),
@@ -304,7 +380,22 @@ function ContactList({ patient }: { patient: PatientDetail }) {
         {
           label: "Data de nascimento",
           value: patient.birthDate ? (
-            <span className="font-mono">{formatDate(patient.birthDate)}</span>
+            <span className="font-mono tabular-nums">
+              {formatDate(patient.birthDate)}
+            </span>
+          ) : (
+            missing
+          ),
+        },
+        {
+          label: "E-mail",
+          value: patient.email ? (
+            <a
+              href={`mailto:${patient.email}`}
+              className="font-mono text-label text-ink-primary underline-offset-4 hover:text-accent-ink hover:underline"
+            >
+              {patient.email}
+            </a>
           ) : (
             missing
           ),
@@ -314,7 +405,10 @@ function ContactList({ patient }: { patient: PatientDetail }) {
   );
 }
 
-/** Contagens de apoio, compactas: o histórico detalhado está nas abas. */
+/**
+ * Faixa de stat cards da jornada. Só as contagens que a API entrega
+ * (`GET patients/:id/summary`) — nada de taxa ou tendência calculada aqui.
+ */
 function SummaryBlock({
   summary,
   error,
@@ -324,50 +418,52 @@ function SummaryBlock({
   error: unknown;
   onRetry: () => void;
 }) {
-  const items = [
-    { label: "Consultas", value: summary?.appointmentsCount, tone: "" },
-    { label: "Canceladas", value: summary?.cancelledCount, tone: "" },
-    { label: "Documentos", value: summary?.documentsCount, tone: "" },
-    {
-      label: "Pendências",
-      value: summary?.openTasksCount,
-      tone: summary && summary.openTasksCount > 0 ? "text-warning" : "",
-    },
-  ];
+  if (error) {
+    return (
+      <Panel as="div" className="mb-4 px-4 py-3 md:px-5">
+        <InlineError
+          error={error}
+          onRetry={onRetry}
+          label="O resumo não carregou."
+        />
+      </Panel>
+    );
+  }
+  const pending = summary ? summary.openTasksCount > 0 : false;
+  const loading = (
+    <span className="skeleton inline-block h-6 w-8 align-middle">
+      <span className="sr-only">Carregando…</span>
+    </span>
+  );
   return (
-    <Panel aria-labelledby="ficha-resumo">
-      <PanelHeader id="ficha-resumo" title="Resumo" />
-      <div className="px-4 py-3 md:px-5">
-        {error ? (
-          <InlineError
-            error={error}
-            onRetry={onRetry}
-            label="O resumo não carregou."
-          />
-        ) : (
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4 xl:grid-cols-2">
-            {items.map((item) => (
-              <div
-                key={item.label}
-                className="flex items-baseline justify-between gap-2 sm:flex-col sm:items-start xl:flex-row xl:items-baseline"
-              >
-                <dt className="text-label text-ink-secondary">{item.label}</dt>
-                <dd
-                  className={cn(
-                    "font-mono text-card font-semibold text-ink-primary",
-                    item.tone,
-                  )}
-                >
-                  {item.value ?? (
-                    <span className="skeleton inline-block h-4 w-6 align-middle" />
-                  )}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        )}
-      </div>
-    </Panel>
+    <section
+      aria-label="Resumo do paciente"
+      className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4"
+    >
+      <StatTile
+        label="Consultas"
+        value={summary?.appointmentsCount ?? loading}
+        icon={<CalendarClock />}
+      />
+      <StatTile
+        label="Canceladas"
+        value={summary?.cancelledCount ?? loading}
+        icon={<CalendarX />}
+      />
+      <StatTile
+        label="Documentos"
+        value={summary?.documentsCount ?? loading}
+        icon={<FileText />}
+      />
+      <StatTile
+        label="Pendências"
+        value={summary?.openTasksCount ?? loading}
+        icon={<ClipboardCheck />}
+        tone={pending ? "warning" : "default"}
+        dot={pending ? "static" : undefined}
+        hint={pending ? "Ver na aba Pendências" : undefined}
+      />
+    </section>
   );
 }
 
@@ -406,11 +502,29 @@ function AppointmentsTab({ patientId }: { patientId: string }) {
     );
   }
 
+  const lastIndex = items.length - 1;
   return (
     <>
-      <ul className="divide-y divide-border-subtle">
-        {items.map((item) => (
-          <li key={item.id}>
+      {/* Linha do tempo da jornada: trilho fino à esquerda, um marcador na cor do estado por consulta. */}
+      <ol className="px-2 py-2 md:px-3">
+        {items.map((item, index) => (
+          <li key={item.id} className="relative pl-7">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "absolute left-[13px] w-px bg-border-default",
+                lastIndex === 0 && !query.hasNextPage && "hidden",
+                index === 0 ? "top-5" : "top-0",
+                index === lastIndex && !query.hasNextPage ? "h-5" : "bottom-0",
+              )}
+            />
+            <span
+              aria-hidden="true"
+              className={cn(
+                "absolute top-4 left-[9px] size-2.5 rounded-full ring-4 ring-surface-base",
+                STATE_SOLID[item.derivedState],
+              )}
+            />
             <Link
               to={`/consultas/${item.id}`}
               state={{
@@ -418,9 +532,9 @@ function AppointmentsTab({ patientId }: { patientId: string }) {
                 backgroundLocation: location,
               }}
               aria-label={`Consulta de ${formatDate(item.startsAt)} às ${item.time}, ${item.stateLabel}`}
-              className="group grid grid-cols-[7rem_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors hover:bg-surface-app md:grid-cols-[7.5rem_minmax(0,1fr)_10rem_1rem] md:px-5"
+              className="group grid grid-cols-[6.5rem_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 rounded-raised px-3 py-2.5 transition-colors duration-150 hover:bg-surface-hover md:grid-cols-[7rem_minmax(0,1fr)_auto_1rem]"
             >
-              <span className="font-mono">
+              <span className="font-mono tabular-nums">
                 <span className="block text-body font-semibold whitespace-nowrap text-ink-primary">
                   {formatDate(item.startsAt)}
                 </span>
@@ -449,7 +563,7 @@ function AppointmentsTab({ patientId }: { patientId: string }) {
             </Link>
           </li>
         ))}
-      </ul>
+      </ol>
       {query.hasNextPage ? (
         <div className="flex justify-center border-t border-border-subtle px-4 py-3">
           <Button
@@ -689,8 +803,8 @@ function TaskRow({ task }: { task: TaskItem }) {
             {task.dueLabel}
           </Badge>
         </div>
-        <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-label text-ink-secondary">
-          <span>{TASK_TYPE_LABEL[task.type] ?? task.type}</span>
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-label text-ink-secondary">
+          <TaskTypeTag type={task.type} />
           <span>Sugestão: {task.suggestedAction}</span>
           {task.status === "EM_ANDAMENTO" ? (
             <span className="text-info">

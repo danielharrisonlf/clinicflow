@@ -23,7 +23,7 @@ import {
 import type * as React from "react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { Badge } from "@/components/ui/badge";
+import { Badge, Dot } from "@/components/ui/badge";
 import { Button, ButtonAnchor, ButtonLink } from "@/components/ui/button";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { PageHeader } from "@/components/ui/page";
@@ -53,23 +53,28 @@ import {
 } from "../appointments/labels";
 import { NewTaskOverlay } from "./new-task-overlay";
 import { ResolveTaskOverlay } from "./resolve-task-overlay";
+import { RESCUE_TYPES, TASK_TYPE_INK, TaskTypeTag } from "./task-type";
 
 const PAGE_SIZE = 15;
 
-/** Os três números do funil viram atalho para o filtro do mesmo tipo. */
+/**
+ * Os três números do funil viram atalho para o filtro do mesmo tipo. Ordem de
+ * resgate: primeiro a receita que já escapou (falta), depois a que está em
+ * risco (sem resposta), por fim a futura (retorno).
+ */
 const SUMMARY_TILES: {
   type: TaskType;
   label: string;
   key: "returnsToSchedule" | "pendingConfirmations" | "noShowsToRecover";
   icon: React.ComponentType<{ className?: string }>;
-  tone: "default" | "warning" | "danger";
+  tone: "revenue" | "warning" | "danger";
 }[] = [
   {
-    type: "RETORNO_A_AGENDAR",
-    label: "Retornos a agendar",
-    key: "returnsToSchedule",
-    icon: RotateCcw,
-    tone: "default",
+    type: "RESGATE_NO_SHOW",
+    label: "Faltas a resgatar",
+    key: "noShowsToRecover",
+    icon: UserX,
+    tone: "danger",
   },
   {
     type: "CONFIRMACAO_PENDENTE",
@@ -79,11 +84,11 @@ const SUMMARY_TILES: {
     tone: "warning",
   },
   {
-    type: "RESGATE_NO_SHOW",
-    label: "Faltas a resgatar",
-    key: "noShowsToRecover",
-    icon: UserX,
-    tone: "danger",
+    type: "RETORNO_A_AGENDAR",
+    label: "Retornos a agendar",
+    key: "returnsToSchedule",
+    icon: RotateCcw,
+    tone: "revenue",
   },
 ];
 
@@ -189,7 +194,22 @@ export function TasksPage() {
   });
 
   const list = tasks.data?.data ?? [];
+  // Resgates sobem para o topo da página; dentro de cada grupo vale a ordem do servidor (prazo).
+  const rescues = list.filter((task) => RESCUE_TYPES.has(task.type));
+  const others = list.filter((task) => !RESCUE_TYPES.has(task.type));
   const s = summary.data;
+
+  function renderRows(group: TaskItem[]) {
+    return group.map((task) => (
+      <TaskRow
+        key={task.id}
+        task={task}
+        contacting={contact.isPending && contact.variables?.id === task.id}
+        onContact={() => contact.mutate(task)}
+        onResolve={() => setResolving(task)}
+      />
+    ));
+  }
 
   return (
     <>
@@ -215,7 +235,7 @@ export function TasksPage() {
             label="O resumo das pendências não carregou."
           />
         ) : null}
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border-subtle bg-border-subtle sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
           {SUMMARY_TILES.map((tile) => (
             <SummaryTile
               key={tile.type}
@@ -223,6 +243,7 @@ export function TasksPage() {
               icon={tile.icon}
               value={s ? s[tile.key] : undefined}
               tone={tile.tone}
+              dotClass={TASK_TYPE_INK[tile.type]}
               pressed={types.includes(tile.type)}
               onClick={() => toggleType(tile.type)}
             />
@@ -319,24 +340,46 @@ export function TasksPage() {
           )
         ) : (
           <>
-            <ul
+            <div
               className={cn(
-                "divide-y divide-border-subtle transition-opacity duration-150",
+                "transition-opacity duration-150",
                 tasks.isPlaceholderData && "opacity-60",
               )}
             >
-              {list.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  contacting={
-                    contact.isPending && contact.variables?.id === task.id
-                  }
-                  onContact={() => contact.mutate(task)}
-                  onResolve={() => setResolving(task)}
-                />
-              ))}
-            </ul>
+              {rescues.length > 0 ? (
+                <section aria-labelledby="grupo-resgates">
+                  <GroupHeader
+                    id="grupo-resgates"
+                    title="Resgates"
+                    hint="Faltas e confirmações sem resposta: receita que já estava na agenda."
+                    count={rescues.length}
+                    dotClass="text-danger"
+                  />
+                  <ul className="divide-y divide-border-subtle">
+                    {renderRows(rescues)}
+                  </ul>
+                </section>
+              ) : null}
+              {others.length > 0 ? (
+                rescues.length > 0 ? (
+                  <section aria-labelledby="grupo-demais">
+                    <GroupHeader
+                      id="grupo-demais"
+                      title="Demais pendências"
+                      count={others.length}
+                      className="border-t"
+                    />
+                    <ul className="divide-y divide-border-subtle">
+                      {renderRows(others)}
+                    </ul>
+                  </section>
+                ) : (
+                  <ul className="divide-y divide-border-subtle">
+                    {renderRows(others)}
+                  </ul>
+                )
+              ) : null}
+            </div>
             {meta ? (
               <Pagination
                 meta={meta}
@@ -360,68 +403,68 @@ export function TasksPage() {
   );
 }
 
-/** Número do funil que também filtra. Botão de alternância, não link: fica na mesma tela. */
+/**
+ * Número do funil que também filtra. Botão de alternância, não link: fica na
+ * mesma tela. Anatomia de stat card do bento; o dot leva o matiz do tipo
+ * (rosa falta, âmbar sem resposta, esmeralda retorno) e o valor só ganha cor
+ * quando há o que resgatar.
+ */
 function SummaryTile({
   label,
   value,
   icon: Icon,
   tone,
+  dotClass,
   pressed,
   onClick,
 }: {
   label: string;
   value?: number;
   icon: React.ComponentType<{ className?: string }>;
-  tone: "default" | "warning" | "danger";
+  tone: "default" | "revenue" | "warning" | "danger";
+  dotClass?: string;
   pressed?: boolean;
   onClick?: () => void;
 }) {
   const attention = value !== undefined && value > 0;
-  const ink =
-    attention && tone === "warning"
-      ? "text-warning"
-      : attention && tone === "danger"
-        ? "text-danger"
-        : "text-ink-primary";
-  const chip =
-    attention && tone === "warning"
-      ? "bg-warning-weak text-warning"
-      : attention && tone === "danger"
-        ? "bg-danger-weak text-danger"
-        : "bg-surface-sunken text-ink-secondary";
+  const ink = !attention
+    ? "text-ink-primary"
+    : {
+        default: "text-ink-primary",
+        revenue: "text-revenue",
+        warning: "text-warning",
+        danger: "text-danger",
+      }[tone];
   const body = (
     <>
+      <span className="flex min-w-0 items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1.5 text-micro font-semibold tracking-wider text-ink-tertiary uppercase">
+          {dotClass ? <Dot className={dotClass} /> : null}
+          <span className="truncate">{label}</span>
+        </span>
+        {pressed ? (
+          <Check
+            className="size-4 shrink-0 text-accent-ink"
+            aria-hidden="true"
+          />
+        ) : (
+          <Icon className="size-4 shrink-0 text-ink-tertiary" />
+        )}
+      </span>
       <span
         className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-control",
-          chip,
+          "block font-mono text-metric-sm font-semibold tracking-tight tabular-nums md:text-metric",
+          ink,
         )}
-        aria-hidden="true"
       >
-        <Icon className="size-4.5" />
+        {value ?? "—"}
       </span>
-      <span className="min-w-0">
-        <span
-          className={cn("block font-mono text-metric-sm font-semibold", ink)}
-        >
-          {value ?? "—"}
-        </span>
-        <span className="block text-label leading-tight text-ink-secondary">
-          {label}
-        </span>
-      </span>
-      {pressed ? (
-        <Check
-          className="ml-auto size-4 shrink-0 self-start text-accent-ink"
-          aria-hidden="true"
-        />
-      ) : null}
     </>
   );
   const base =
-    "flex min-w-0 items-center gap-3 bg-surface-base px-3.5 py-3 text-left";
+    "flex min-w-0 flex-col gap-2 rounded-card border bg-surface-base p-4 text-left shadow-panel";
   if (!onClick) {
-    return <div className={base}>{body}</div>;
+    return <div className={cn(base, "border-border-subtle")}>{body}</div>;
   }
   return (
     <button
@@ -431,12 +474,57 @@ function SummaryTile({
       title={pressed ? "Tirar este filtro" : "Incluir este tipo no filtro"}
       className={cn(
         base,
-        "transition-colors",
-        pressed ? "bg-accent-weak" : "hover:bg-surface-app",
+        "transition-colors duration-150",
+        pressed
+          ? "border-accent bg-accent-weak"
+          : // Hover translúcido por cima da base (gradiente sólido), sem trocar a cor do card.
+            "border-border-subtle hover:border-border-default hover:bg-linear-to-b hover:from-surface-hover hover:to-surface-hover",
       )}
     >
       {body}
     </button>
+  );
+}
+
+/** Título de grupo dentro do painel "Em aberto": separa resgates do resto da fila. */
+function GroupHeader({
+  id,
+  title,
+  hint,
+  count,
+  dotClass,
+  className,
+}: {
+  id: string;
+  title: string;
+  hint?: string;
+  count: number;
+  dotClass?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-border-subtle bg-surface-app px-4 py-2.5 md:px-5",
+        className,
+      )}
+    >
+      <h3
+        id={id}
+        className="flex items-center gap-1.5 text-label font-semibold text-ink-primary"
+      >
+        {dotClass ? <Dot className={cn("self-center", dotClass)} /> : null}
+        {title}
+      </h3>
+      <span className="font-mono text-label text-ink-tertiary tabular-nums">
+        {count}
+      </span>
+      {hint ? (
+        <span className="text-label text-ink-secondary max-sm:basis-full">
+          {hint}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -458,7 +546,7 @@ function FilterChip({
         "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-label font-semibold transition-colors duration-150 pointer-coarse:min-h-11",
         pressed
           ? "border-accent bg-accent-weak text-accent-ink"
-          : "border-border-default bg-surface-base text-ink-secondary hover:border-border-strong hover:text-ink-primary",
+          : "border-border-default bg-surface-base text-ink-secondary hover:border-border-strong hover:bg-linear-to-b hover:from-surface-hover hover:to-surface-hover hover:text-ink-primary",
       )}
     >
       {pressed ? <Check className="size-3.5" aria-hidden="true" /> : null}
@@ -510,7 +598,7 @@ function TaskRow({
           >
             {task.patientName}
           </Link>
-          <Badge size="sm">{TASK_TYPE_LABEL[task.type]}</Badge>
+          <TaskTypeTag type={task.type} />
           {task.status === "EM_ANDAMENTO" ? (
             <Badge tone="info" size="sm">
               Em andamento

@@ -211,7 +211,7 @@ export function WhatsappSection({
                         size="sm"
                         onClick={() => insert(p.token)}
                         aria-label={`Inserir ${p.label.toLowerCase()} (${p.token})`}
-                        className="font-mono"
+                        className="font-mono tabular-nums"
                       >
                         <Plus aria-hidden="true" />
                         {p.token}

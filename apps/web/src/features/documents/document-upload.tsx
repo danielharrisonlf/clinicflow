@@ -228,7 +228,7 @@ function UploadForm({
             errors.file ? "border-danger" : "border-border-strong",
             dragging
               ? "border-accent bg-accent-weak"
-              : "bg-surface-app hover:bg-surface-sunken",
+              : "bg-surface-app hover:border-accent",
           )}
         >
           <input
@@ -252,7 +252,7 @@ function UploadForm({
               <span className="max-w-full truncate text-body font-semibold text-ink-primary">
                 {file.name}
               </span>
-              <span className="font-mono text-label text-ink-secondary">
+              <span className="font-mono tabular-nums text-label text-ink-secondary">
                 {sizeLabel(file.size)} — clique para trocar
               </span>
             </>
@@ -450,13 +450,13 @@ function PatientPicker({
                     "flex cursor-pointer items-center justify-between gap-3 px-3 py-2 pointer-coarse:min-h-11",
                     index === active
                       ? "bg-accent-weak"
-                      : "hover:bg-surface-app",
+                      : "hover:bg-surface-hover",
                   )}
                 >
                   <span className="min-w-0 truncate text-body font-semibold text-ink-primary">
                     {item.name}
                   </span>
-                  <span className="shrink-0 font-mono text-label text-ink-secondary">
+                  <span className="shrink-0 font-mono tabular-nums text-label text-ink-secondary">
                     {item.phone}
                   </span>
                 </div>

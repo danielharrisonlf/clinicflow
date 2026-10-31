@@ -1,12 +1,12 @@
 # ClinicFlow
 
-Software de operação para a recepção de clínicas: agenda, chegadas, sala de espera,
-cadastros, documentos e pendências de retorno. O próximo passo de cada paciente,
-claro para toda a equipe.
+Cockpit de operação e resgate de receita para clínicas médicas. A raiz autenticada
+é o **Cockpit do dia**: quem chegou, quem está em risco de faltar e qual o próximo
+clique — com prevenção de faltas por WhatsApp, sala de espera ao vivo, agenda
+multiprofissional e a jornada completa de cada paciente.
 
 A [direção de produto](PRODUCT.md) define público, posicionamento e prioridades.
-A apresentação pública fica em `/conhecer` e na raiz para visitantes sem sessão;
-a raiz autenticada continua sendo o painel operacional.
+A apresentação pública fica em `/conhecer` e na raiz para visitantes sem sessão.
 
 O [design system](DESIGN.md) documenta os padrões da interface. O
 [relatório do redesign](docs/REDESIGN-VALIDATION.md) reúne as melhorias, os testes e as evidências visuais.

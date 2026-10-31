@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/ui/page";
 import { clampPage, Pagination } from "@/components/ui/pagination";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { EmptyState, ErrorState, RowsSkeleton } from "@/components/ui/states";
-import { Panel } from "@/components/ui/surface";
+import { Avatar, Panel } from "@/components/ui/surface";
 import { useToast } from "@/components/ui/toast";
 import { errorMessage } from "@/lib/api/client";
 import { patientsApi } from "@/lib/api/endpoints";
@@ -277,41 +277,46 @@ function PatientsTable({ items }: { items: PatientListItem[] }) {
         {items.map((patient) => (
           <tr
             key={patient.id}
-            className="transition-colors hover:bg-surface-app"
+            className="transition-colors hover:bg-surface-hover"
           >
             <td className="min-w-0 px-5 py-3">
-              <Link
-                to={`/pacientes/${patient.id}`}
-                className="block truncate text-body font-semibold text-ink-primary hover:text-accent-ink hover:underline"
-              >
-                {patient.name}
-              </Link>
-              <p className="flex min-w-0 gap-x-3 text-label text-ink-secondary">
-                <span className="shrink-0">
-                  {ageLabel(patient.age) ?? "Idade não informada"}
-                </span>
-                <span className="truncate xl:hidden">
-                  <a
-                    href={`tel:${phoneDigits(patient.phone)}`}
-                    className="font-mono hover:text-ink-primary hover:underline"
+              <div className="flex min-w-0 items-center gap-3">
+                <Avatar name={patient.name} size="md" />
+                <div className="min-w-0">
+                  <Link
+                    to={`/pacientes/${patient.id}`}
+                    className="block truncate text-body font-semibold text-ink-primary hover:text-accent-ink hover:underline"
                   >
-                    {patient.phone}
-                  </a>
-                </span>
-              </p>
+                    {patient.name}
+                  </Link>
+                  <p className="flex min-w-0 gap-x-3 text-label text-ink-secondary">
+                    <span className="shrink-0">
+                      {ageLabel(patient.age) ?? "Idade não informada"}
+                    </span>
+                    <span className="truncate xl:hidden">
+                      <a
+                        href={`tel:${phoneDigits(patient.phone)}`}
+                        className="font-mono tabular-nums hover:text-ink-primary hover:underline"
+                      >
+                        {patient.phone}
+                      </a>
+                    </span>
+                  </p>
+                </div>
+              </div>
             </td>
             <td className="hidden px-4 py-3 xl:table-cell">
               <a
                 href={`tel:${phoneDigits(patient.phone)}`}
-                className="font-mono text-body whitespace-nowrap text-ink-secondary hover:text-ink-primary hover:underline"
+                className="font-mono text-body tabular-nums whitespace-nowrap text-ink-secondary hover:text-ink-primary hover:underline"
               >
                 {patient.phone}
               </a>
             </td>
-            <td className="px-4 py-3 font-mono text-label whitespace-nowrap text-ink-primary">
+            <td className="px-4 py-3 font-mono text-label tabular-nums whitespace-nowrap text-ink-primary">
               <VisitDate value={patient.nextVisitAt} />
             </td>
-            <td className="hidden px-4 py-3 font-mono text-label whitespace-nowrap text-ink-secondary xl:table-cell">
+            <td className="hidden px-4 py-3 font-mono text-label tabular-nums whitespace-nowrap text-ink-secondary xl:table-cell">
               <VisitDate value={patient.lastVisitAt} />
             </td>
             <td className="px-4 py-3">
@@ -345,7 +350,7 @@ function PatientsCards({ items }: { items: PatientListItem[] }) {
     <ul className="divide-y divide-border-subtle md:hidden">
       {items.map((patient) => (
         <li key={patient.id}>
-          <article className="relative px-4 py-3 transition-colors active:bg-surface-app">
+          <article className="relative px-4 py-3 transition-colors active:bg-surface-hover">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <Link

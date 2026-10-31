@@ -7,6 +7,7 @@ import {
   Plus,
 } from "lucide-react";
 import { Link, useLocation, useSearchParams } from "react-router";
+import { Dot } from "@/components/ui/badge";
 import { Button, ButtonLink, IconButton } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page";
@@ -17,6 +18,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState, ErrorState, Loading } from "@/components/ui/states";
 import {
+  LIVE_STATES,
   STATE_ICON,
   STATE_LABEL,
   StatusBadge,
@@ -165,8 +167,12 @@ export function AgendaPage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+      {/* Barra de ferramentas como painel do bento: período, navegação e filtros juntos. */}
+      <Panel
+        as="div"
+        className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-3 py-3 md:px-4"
+      >
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex items-center gap-1.5">
             <IconButton
               label={span === 1 ? "Dia anterior" : "Período anterior"}
@@ -200,7 +206,7 @@ export function AgendaPage() {
             >
               {monthLabel(from, to)}
             </h2>
-            <p className="flex items-center gap-1.5 text-label text-ink-secondary">
+            <p className="tabular flex items-center gap-1.5 text-label text-ink-secondary">
               {calendar.isFetching && stale ? (
                 <Spinner className="size-3.5 text-accent" />
               ) : null}
@@ -243,7 +249,7 @@ export function AgendaPage() {
             ))}
           </SelectField>
         </div>
-      </div>
+      </Panel>
 
       {calendar.isPending ? (
         <AgendaSkeleton span={span} />
@@ -374,11 +380,11 @@ function DayList({
                     from: `${location.pathname}${location.search}`,
                     backgroundLocation: location,
                   }}
-                  className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 px-4 py-3 transition-colors hover:bg-surface-app sm:grid-cols-[4rem_minmax(0,1fr)_auto] md:px-5"
+                  className="grid min-h-16 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 px-4 py-3 transition-colors duration-150 hover:bg-surface-hover sm:grid-cols-[4rem_minmax(0,1fr)_auto] md:px-5"
                 >
                   <span
                     className={cn(
-                      "font-mono text-card font-semibold",
+                      "font-mono text-card font-semibold tabular-nums",
                       finished ? "text-ink-tertiary" : "text-ink-primary",
                     )}
                   >
@@ -389,9 +395,11 @@ function DayList({
                       {slot.patientName}
                     </span>
                     <span className="block truncate text-label text-ink-secondary">
-                      {slot.professionalName}
-                      <span className="font-mono">
-                        {" "}
+                      {slot.professionalName}{" "}
+                      <span aria-hidden="true" className="text-ink-tertiary">
+                        ·
+                      </span>{" "}
+                      <span className="font-mono tabular-nums">
                         {slot.durationMinutes} min
                       </span>
                     </span>
@@ -439,44 +447,52 @@ function DayColumn({
       aria-labelledby={headingId}
       className={cn(
         "flex min-w-0 flex-col overflow-hidden",
+        // Hoje: a micro-borda vira accent. É o único contorno colorido da grade.
         isToday && "border-accent",
+        past && "bg-surface-app shadow-none",
       )}
     >
       <div
         className={cn(
-          "flex items-start justify-between gap-1 border-b border-border-subtle py-2",
-          compact ? "px-2" : "px-3",
+          "flex items-center justify-between gap-1 border-b border-border-subtle py-1.5",
+          compact ? "pr-0.5 pl-2" : "pr-1 pl-3",
           isToday && "bg-accent-weak",
         )}
       >
         <h3 id={headingId} className="min-w-0">
           <span
             className={cn(
-              "block text-label font-semibold",
+              "flex items-center gap-1.5 text-label font-semibold",
               isToday ? "text-accent-ink" : "text-ink-secondary",
             )}
           >
+            {isToday ? <Dot /> : null}
             {isToday ? "Hoje" : weekday}
             <span className="sr-only">, {formatDayLong(date)}</span>
           </span>
           <span
             aria-hidden="true"
             className={cn(
-              "block truncate font-mono text-card font-semibold",
-              isToday ? "text-accent-ink" : "text-ink-primary",
+              "block truncate font-mono text-card font-semibold tabular-nums",
+              isToday
+                ? "text-accent-ink"
+                : past
+                  ? "text-ink-tertiary"
+                  : "text-ink-primary",
             )}
           >
             {compact ? dayMonth?.split(" ")[0] : dayMonth}
           </span>
         </h3>
         {past ? null : (
+          // Alvo de 44px em qualquer ponteiro; o ícone continua discreto.
           <Link
             to={newAppointmentHref(date, professionalId)}
             aria-label={`Agendar em ${formatDayLong(date)}`}
             title="Agendar neste dia"
-            className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-marker text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-accent-ink pointer-coarse:size-11"
+            className="flex size-11 shrink-0 items-center justify-center rounded-control text-ink-secondary transition-colors duration-150 hover:bg-surface-hover hover:text-accent-ink"
           >
-            <Plus className="size-4" aria-hidden="true" />
+            <Plus className="size-4.5" aria-hidden="true" />
           </Link>
         )}
       </div>
@@ -505,8 +521,9 @@ function DayColumn({
 
 /**
  * Cartão da semana: hora e paciente, mais nada. Numa coluna de ~100px o selo
- * "Em atendimento" não cabe — o estado vira ícone colorido, e o nome do estado
- * continua lá para leitor de tela e no `title`.
+ * "Em atendimento" não cabe — o estado vira o dot e o ícone do selo, na mesma
+ * cor (o dot pulsa nos mesmos estados vivos do `StatusBadge`), e o nome do
+ * estado continua lá para leitor de tela e no `title`.
  */
 function CompactSlot({ slot }: { slot: CalendarSlot }) {
   const location = useLocation();
@@ -521,17 +538,20 @@ function CompactSlot({ slot }: { slot: CalendarSlot }) {
         backgroundLocation: location,
       }}
       title={`${slot.time} ${slot.patientName} — ${state}, ${slot.professionalName}`}
-      className="block rounded-marker px-1.5 py-1 transition-colors hover:bg-surface-sunken"
+      className="block rounded-marker px-1.5 py-1 transition-colors duration-150 hover:bg-surface-hover"
     >
-      <span className="flex items-center gap-1">
+      <span
+        className={cn("flex items-center gap-1", STATE_INK[slot.derivedState])}
+      >
+        <Dot pulse={LIVE_STATES.has(slot.derivedState)} />
         <Icon
-          className={cn("size-3.5 shrink-0", STATE_INK[slot.derivedState])}
+          className="size-3.5 shrink-0"
           strokeWidth={2.25}
           aria-hidden="true"
         />
         <span
           className={cn(
-            "font-mono text-micro font-semibold",
+            "font-mono text-micro font-semibold tabular-nums",
             finished ? "text-ink-tertiary" : "text-ink-primary",
           )}
         >
@@ -564,12 +584,16 @@ function SlotCard({ slot }: { slot: CalendarSlot }) {
         from: `${location.pathname}${location.search}`,
         backgroundLocation: location,
       }}
-      className="block rounded-raised border border-border-subtle bg-surface-base px-2.5 py-2 transition-colors hover:border-border-strong hover:bg-surface-app"
+      className={cn(
+        "block rounded-raised border border-border-subtle px-2.5 py-2 transition-colors duration-150 hover:border-border-default hover:bg-surface-hover",
+        // Concluída e cancelada recuam: já saíram da fila de trabalho.
+        finished ? "bg-transparent" : "bg-surface-base",
+      )}
     >
       <span className="flex flex-wrap items-center justify-between gap-1.5">
         <span
           className={cn(
-            "font-mono text-label font-semibold",
+            "font-mono text-label font-semibold tabular-nums",
             finished ? "text-ink-tertiary" : "text-ink-primary",
           )}
         >

@@ -109,7 +109,7 @@ export function SettingsPage() {
               <a
                 key={id}
                 href={`#${id}`}
-                className="shrink-0 rounded-control px-3 py-2 text-label font-medium text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-accent-ink lg:w-full"
+                className="inline-flex shrink-0 items-center rounded-control px-3 py-2 pointer-coarse:min-h-11 text-label font-medium text-ink-secondary hover:bg-surface-hover hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-accent-ink lg:w-full"
               >
                 {label}
               </a>
@@ -141,7 +141,7 @@ export function SettingsPage() {
                         {
                           label: "Fuso horário",
                           value: (
-                            <span className="font-mono">
+                            <span className="font-mono tabular-nums">
                               {settings.data.timezone}
                             </span>
                           ),

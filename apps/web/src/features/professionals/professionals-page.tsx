@@ -185,7 +185,7 @@ export function ProfessionalsPage() {
 function ProfessionalRow({ professional }: { professional: Professional }) {
   const href = `/profissionais/${professional.id}`;
   return (
-    <li className="relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 transition-colors hover:bg-surface-app md:px-5 lg:grid-cols-[minmax(0,1fr)_10rem_8rem_8rem_2rem] lg:gap-4">
+    <li className="relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 transition-colors hover:bg-surface-hover md:px-5 lg:grid-cols-[minmax(0,1fr)_10rem_8rem_8rem_2rem] lg:gap-4">
       <div className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1">
         <Avatar name={professional.name} />
         <div className="min-w-0">
@@ -217,7 +217,7 @@ function ProfessionalRow({ professional }: { professional: Professional }) {
 
       <p className="col-start-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-label text-ink-secondary lg:col-start-auto lg:contents">
         <span className="lg:text-ink-primary">
-          <span className="font-mono font-semibold text-ink-primary">
+          <span className="font-mono tabular-nums font-semibold text-ink-primary">
             {professional.todayAppointmentsCount}
           </span>{" "}
           {professional.todayAppointmentsCount === 1
