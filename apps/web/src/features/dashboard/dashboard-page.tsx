@@ -10,7 +10,8 @@ import {
   CheckCheck,
   ChevronRight,
   ClipboardList,
-  Clock3,
+  LifeBuoy,
+  Stethoscope,
   TriangleAlert,
 } from "lucide-react";
 import { useEffect } from "react";
@@ -20,6 +21,7 @@ import {
   useOutletContext,
   useSearchParams,
 } from "react-router";
+import { Dot } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page";
 import { clampPage, Pagination } from "@/components/ui/pagination";
@@ -34,7 +36,7 @@ import {
   RowsSkeleton,
   TextSkeleton,
 } from "@/components/ui/states";
-import { Panel, PanelHeader } from "@/components/ui/surface";
+import { Panel, PanelHeader, StatTile } from "@/components/ui/surface";
 import { subscribe } from "@/lib/api/client";
 import {
   appointmentsApi,
@@ -43,39 +45,21 @@ import {
   waitingRoomApi,
 } from "@/lib/api/endpoints";
 import type {
-  AppointmentStatus,
-  ListAppointmentsQuery,
+  ListTasksQuery,
+  TaskItem,
+  TaskType,
   TodaySummary,
 } from "@/lib/api/types";
 import { qk } from "@/lib/query";
 import { cn, plural } from "@/lib/utils";
 import { AppointmentList } from "../appointments/appointment-list";
-import { todayISO } from "../appointments/labels";
-
-type Filter = "abertas" | "confirmar" | "atrasadas" | "concluidas" | "todas";
-
-/** Estados que ainda pedem algo da recepção. É o filtro padrão do turno. */
-const OPEN_STATUSES: AppointmentStatus[] = [
-  "AGENDADA",
-  "CONFIRMADA",
-  "CHECK_IN",
-  "EM_ATENDIMENTO",
-];
-
-const PAGE_SIZE = 50;
-
-function queryFor(
-  filter: Filter,
-  date: string,
-  page: number,
-): ListAppointmentsQuery {
-  const base = { date, page, limit: PAGE_SIZE, direction: "asc" as const };
-  if (filter === "abertas") return { ...base, status: OPEN_STATUSES };
-  if (filter === "confirmar") return { ...base, status: ["AGENDADA"] };
-  if (filter === "concluidas") return { ...base, status: ["CONCLUIDA"] };
-  if (filter === "atrasadas") return { ...base, derivedState: "ATRASADA" };
-  return base;
-}
+import {
+  APPOINTMENT_TYPE_LABEL,
+  TASK_TYPE_LABEL,
+  todayISO,
+} from "../appointments/labels";
+import { type Filter, queryFor } from "./filters";
+import { NoShowPanel } from "./no-show-panel";
 
 export function DashboardPage() {
   const queryClient = useQueryClient();
@@ -125,9 +109,10 @@ export function DashboardPage() {
     if (target !== page) update({ pagina: target });
   });
 
-  // O painel fica aberto o dia todo. O stream evita que a recepção chame
-  // alguém que o consultório já atendeu. Só as listas e a fila recarregam —
-  // invalidar todo `appointments` refazia detalhes e auditorias abertos.
+  // O Cockpit fica aberto o dia todo. O stream evita que a recepção chame
+  // alguém que o consultório já atendeu. Só as listas, a fila e os envios
+  // recarregam — invalidar todo `appointments` refazia detalhes e auditorias
+  // abertos. A resposta do paciente no WhatsApp chega por aqui também.
   useEffect(() => {
     return subscribe<TodaySummary>("/dashboard/stream", (incoming) => {
       queryClient.setQueryData(qk.dashboard.today(date), incoming);
@@ -135,6 +120,7 @@ export function DashboardPage() {
         queryKey: ["appointments", "list"],
       });
       void queryClient.invalidateQueries({ queryKey: qk.waitingRoom.all });
+      void queryClient.invalidateQueries({ queryKey: qk.notifications.all });
     });
   }, [queryClient, date]);
 
@@ -162,7 +148,7 @@ export function DashboardPage() {
   return (
     <>
       <PageHeader
-        title="Painel do dia"
+        title="Cockpit do dia"
         description={
           s?.dateLabel ?? (summary.isError ? "Hoje" : "Carregando o dia…")
         }
@@ -174,109 +160,105 @@ export function DashboardPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
-        <div className="flex min-w-0 flex-col gap-5">
-          <NowStrip
-            summary={s}
-            error={summary.error}
-            onRetry={() => void summary.refetch()}
-            onLate={() => update({ filtro: "atrasadas" })}
-            onUnconfirmed={() => update({ filtro: "confirmar" })}
-            onCompleted={() => update({ filtro: "concluidas" })}
-            className="xl:hidden"
-          />
-          <div className="xl:hidden">
+      <div className="flex flex-col gap-5">
+        <HeroStats
+          summary={s}
+          error={summary.error}
+          onRetry={() => void summary.refetch()}
+          onLate={() => update({ filtro: "atrasadas" })}
+          onUnconfirmed={() => update({ filtro: "confirmar" })}
+          onCompleted={() => update({ filtro: "concluidas" })}
+        />
+
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_24rem] xl:items-start">
+          <div className="flex min-w-0 flex-col gap-5">
             <NextArrival
               id="proxima-chegada-mobile"
               appointment={s?.nextArrival}
               loading={summary.isPending}
+              className="xl:hidden"
             />
+
+            <Panel aria-labelledby="consultas-hoje">
+              <PanelHeader
+                id="consultas-hoje"
+                title="Consultas de hoje"
+                count={
+                  appointments.data
+                    ? plural(appointments.data.meta.itemCount, "consulta")
+                    : undefined
+                }
+                actions={
+                  <SegmentedControl
+                    label="Filtrar consultas"
+                    options={options}
+                    value={filter}
+                    onChange={(value) => update({ filtro: value })}
+                  />
+                }
+              />
+
+              {appointments.isPending ? (
+                <RowsSkeleton rows={7} />
+              ) : appointments.isError ? (
+                <ErrorState
+                  error={appointments.error}
+                  onRetry={() => void appointments.refetch()}
+                />
+              ) : (
+                <>
+                  <AppointmentList
+                    items={appointments.data.data}
+                    emptyState={<DashboardEmpty filter={filter} />}
+                  />
+                  <Pagination
+                    meta={appointments.data.meta}
+                    unit="consultas"
+                    fetching={
+                      appointments.isFetching && appointments.isPlaceholderData
+                    }
+                    onChange={(next) => update({ pagina: next })}
+                  />
+                </>
+              )}
+            </Panel>
           </div>
 
-          <Panel aria-labelledby="consultas-hoje">
-            <PanelHeader
-              id="consultas-hoje"
-              title="Consultas de hoje"
-              count={
-                appointments.data
-                  ? plural(appointments.data.meta.itemCount, "consulta")
-                  : undefined
-              }
-              actions={
-                <SegmentedControl
-                  label="Filtrar consultas"
-                  options={options}
-                  value={filter}
-                  onChange={(value) => update({ filtro: value })}
-                />
-              }
+          {/* Coluna viva. Abaixo de xl só a Prevenção de faltas desce para
+              baixo da lista: a sala e as pendências têm tela própria na
+              navegação, o risco de falta só existe aqui. */}
+          <aside aria-label="Agora na clínica" className="flex flex-col gap-5">
+            <QueuePreview className="hidden xl:block" />
+            <NextArrival
+              id="proxima-chegada-desktop"
+              appointment={s?.nextArrival}
+              loading={summary.isPending}
+              className="hidden xl:block"
             />
-
-            {appointments.isPending ? (
-              <RowsSkeleton rows={7} />
-            ) : appointments.isError ? (
-              <ErrorState
-                error={appointments.error}
-                onRetry={() => void appointments.refetch()}
-              />
-            ) : (
-              <>
-                <AppointmentList
-                  items={appointments.data.data}
-                  emptyState={<DashboardEmpty filter={filter} />}
-                />
-                <Pagination
-                  meta={appointments.data.meta}
-                  unit="consultas"
-                  fetching={
-                    appointments.isFetching && appointments.isPlaceholderData
-                  }
-                  onChange={(next) => update({ pagina: next })}
-                />
-              </>
-            )}
-          </Panel>
+            <NoShowPanel
+              date={date}
+              onShowAll={() => update({ filtro: "confirmar" })}
+            />
+            <RescueTasks className="hidden xl:block" />
+          </aside>
         </div>
-
-        <aside
-          aria-label="Agora na clínica"
-          className="hidden flex-col gap-5 xl:flex"
-        >
-          <NowStrip
-            summary={s}
-            error={summary.error}
-            onRetry={() => void summary.refetch()}
-            onLate={() => update({ filtro: "atrasadas" })}
-            onUnconfirmed={() => update({ filtro: "confirmar" })}
-            onCompleted={() => update({ filtro: "concluidas" })}
-            stacked
-          />
-          <NextArrival
-            id="proxima-chegada-desktop"
-            appointment={s?.nextArrival}
-            loading={summary.isPending}
-          />
-          <QueuePreview />
-          <UrgentTasks />
-        </aside>
       </div>
     </>
   );
 }
 
 /**
- * O que está acontecendo agora. São atalhos, não troféus: cada contagem leva
- * para onde a pessoa resolve aquilo.
+ * Faixa hero do bento. São atalhos, não troféus: cada contagem leva para onde
+ * a pessoa resolve aquilo. Os dois números vivos (sala e consultório) ganham
+ * mais largura; o dot pulsa só quando há alguém ali agora.
  */
-function NowStrip({
+function HeroStats({
   summary,
   error,
   onRetry,
   onLate,
   onUnconfirmed,
   onCompleted,
-  stacked = false,
-  className,
 }: {
   summary?: TodaySummary;
   error: unknown;
@@ -284,118 +266,83 @@ function NowStrip({
   onLate: () => void;
   onUnconfirmed: () => void;
   onCompleted: () => void;
-  stacked?: boolean;
-  className?: string;
 }) {
   if (error && !summary) {
     return (
-      <div className={className}>
-        <InlineError
-          error={error}
-          onRetry={onRetry}
-          label="O resumo do dia não carregou."
-        />
-      </div>
+      <InlineError
+        error={error}
+        onRetry={onRetry}
+        label="O resumo do dia não carregou."
+      />
     );
   }
 
   const value = (n?: number) => (n === undefined ? "—" : n);
-  const tiles = [
-    {
-      key: "espera",
-      label: "Aguardando",
-      value: value(summary?.waiting),
-      icon: Armchair,
-      tone: summary && summary.waiting > 0 ? "warning" : "default",
-      to: "/sala-de-espera",
-    },
-    {
-      key: "confirmar",
-      label: "A confirmar",
-      value: value(summary?.unconfirmed),
-      icon: CalendarClock,
-      tone: summary && summary.unconfirmed > 0 ? "warning" : "default",
-      onClick: onUnconfirmed,
-    },
-    {
-      key: "atrasadas",
-      label: "Atrasadas",
-      value: value(summary?.late),
-      icon: TriangleAlert,
-      tone: summary && summary.late > 0 ? "danger" : "default",
-      onClick: onLate,
-    },
-    {
-      key: "concluidas",
-      label: "Concluídas",
-      value: value(summary?.completed),
-      icon: CheckCheck,
-      tone: "default",
-      onClick: onCompleted,
-    },
-  ] as const;
+  const live = (n?: number) => (n !== undefined && n > 0 ? "pulse" : "static");
+  const waiting = summary?.waiting;
+  const inProgress = summary?.inProgress;
+  const late = summary?.late;
+  const unconfirmed = summary?.unconfirmed;
+  const completed = summary?.completed;
 
   return (
     <section
       aria-label="Resumo de agora"
-      className={cn(
-        "grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border-subtle bg-border-subtle shadow-panel",
-        stacked ? "" : "md:grid-cols-4",
-        className,
-      )}
+      className="grid grid-cols-2 gap-3 md:grid-cols-6 md:gap-4 xl:grid-cols-12"
     >
-      {tiles.map((tile) => {
-        const toneInk =
-          tile.tone === "warning"
-            ? "text-warning"
-            : tile.tone === "danger"
-              ? "text-danger"
-              : "text-ink-primary";
-        const body = (
-          <>
-            <span
-              className={cn(
-                "flex shrink-0 items-center justify-center",
-                toneInk,
-              )}
-              aria-hidden="true"
-            >
-              <tile.icon className="size-4.5" />
-            </span>
-            <span className="min-w-0 flex flex-1 items-center justify-between gap-2">
-              <span className="text-label text-ink-secondary">
-                {tile.label}
-              </span>
-              <span
-                className={cn("font-mono text-card font-semibold", toneInk)}
-              >
-                {tile.value}
-              </span>
-            </span>
-          </>
-        );
-        const base =
-          "flex min-h-12 min-w-0 items-center gap-2 bg-surface-base px-3 py-3 text-left";
-        const interactive =
-          "transition-colors hover:bg-surface-app focus-visible:z-10";
-        if ("to" in tile) {
-          return (
-            <Link key={tile.key} to={tile.to} className={cn(base, interactive)}>
-              {body}
-            </Link>
-          );
+      <StatTile
+        label="Aguardando"
+        value={value(waiting)}
+        tone={waiting ? "warning" : "default"}
+        dot={live(waiting)}
+        icon={<Armchair />}
+        hint={
+          waiting
+            ? `${waiting === 1 ? "paciente" : "pacientes"} na sala de espera`
+            : "Sala de espera vazia"
         }
-        return (
-          <button
-            key={tile.key}
-            type="button"
-            onClick={tile.onClick}
-            className={cn(base, interactive)}
-          >
-            {body}
-          </button>
-        );
-      })}
+        to="/sala-de-espera"
+        className="col-span-2 md:col-span-3 xl:col-span-3"
+      />
+      <StatTile
+        label="Em atendimento"
+        value={value(inProgress)}
+        dot={live(inProgress)}
+        dotTone={inProgress ? "atendimento" : undefined}
+        icon={<Stethoscope />}
+        hint="nos consultórios agora"
+        className="md:col-span-3 xl:col-span-3"
+      />
+      <StatTile
+        label="A confirmar"
+        value={value(unconfirmed)}
+        tone={unconfirmed ? "warning" : "default"}
+        icon={<CalendarClock />}
+        hint={summary ? `${summary.confirmed} já confirmadas` : undefined}
+        onClick={onUnconfirmed}
+        className="md:col-span-2"
+      />
+      <StatTile
+        label="Atrasadas"
+        value={value(late)}
+        tone={late ? "danger" : "default"}
+        dot={late ? "pulse" : undefined}
+        icon={<TriangleAlert />}
+        hint="fora da tolerância"
+        onClick={onLate}
+        className="md:col-span-2"
+      />
+      <StatTile
+        label="Concluídas"
+        value={value(completed)}
+        tone={completed ? "revenue" : "default"}
+        dot="static"
+        dotTone={completed ? "revenue" : undefined}
+        icon={<CheckCheck />}
+        hint={summary ? `de ${summary.scheduled} no dia` : undefined}
+        onClick={onCompleted}
+        className="md:col-span-2"
+      />
     </section>
   );
 }
@@ -404,33 +351,32 @@ function NextArrival({
   id,
   appointment,
   loading,
+  className,
 }: {
   id: string;
   appointment?: TodaySummary["nextArrival"];
   loading: boolean;
+  className?: string;
 }) {
   const location = useLocation();
   return (
-    <Panel aria-labelledby={id}>
+    <Panel aria-labelledby={id} className={className}>
       <PanelHeader id={id} title="Próxima chegada" />
       {loading ? (
-        <div className="p-4">
+        <div className="p-4 md:px-5">
           <TextSkeleton lines={2} />
         </div>
       ) : appointment ? (
-        <div className="flex items-center gap-3 px-4 py-3 md:px-5">
-          <span
-            className="flex size-9 shrink-0 items-center justify-center rounded-control bg-surface-sunken text-ink-secondary"
-            aria-hidden="true"
-          >
-            <Clock3 className="size-4" />
-          </span>
+        <div className="flex items-center gap-4 px-4 py-3.5 md:px-5">
+          <p className="shrink-0 font-mono text-metric-sm font-semibold tracking-tight text-ink-primary tabular-nums">
+            {appointment.time}
+          </p>
           <div className="min-w-0 flex-1">
             <p className="truncate text-body font-semibold text-ink-primary">
               {appointment.patientName}
             </p>
             <p className="truncate text-label text-ink-secondary">
-              <span className="font-mono">{appointment.time}</span> com{" "}
+              {APPOINTMENT_TYPE_LABEL[appointment.type]} com{" "}
               {appointment.professionalName}
             </p>
           </div>
@@ -440,16 +386,17 @@ function NextArrival({
               from: `${location.pathname}${location.search}`,
               backgroundLocation: location,
             }}
-            className="rounded-control px-2 py-2 text-label font-semibold text-accent-ink hover:bg-accent-weak"
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-control px-2 py-2 text-label font-semibold text-accent-ink transition-colors hover:bg-accent-weak pointer-coarse:min-h-11"
           >
-            Abrir{" "}
+            Abrir
             <span className="sr-only">
               consulta de {appointment.patientName}
             </span>
+            <ChevronRight className="size-4" aria-hidden="true" />
           </Link>
         </div>
       ) : (
-        <p className="px-4 py-3 text-label text-ink-secondary md:px-5">
+        <p className="px-4 py-3.5 text-label text-ink-secondary md:px-5">
           Sem novas chegadas previstas para hoje.
         </p>
       )}
@@ -458,34 +405,26 @@ function NextArrival({
 }
 
 /** Quem está esperando agora, na ordem de chegada. A sala completa vive na tela própria. */
-function QueuePreview() {
+function QueuePreview({ className }: { className?: string }) {
   const queue = useQuery({
     queryKey: qk.waitingRoom.list,
     queryFn: waitingRoomApi.list,
   });
 
   return (
-    <Panel aria-labelledby="fila-agora">
+    <Panel aria-labelledby="fila-agora" className={className}>
       <PanelHeader
         id="fila-agora"
         title="Sala de espera"
         count={queue.data ? plural(queue.data.length, "paciente") : undefined}
-        actions={
-          <Link
-            to="/sala-de-espera"
-            className="inline-flex items-center gap-0.5 rounded-marker text-label font-semibold text-accent-ink hover:underline"
-          >
-            Abrir
-            <ChevronRight className="size-4" aria-hidden="true" />
-          </Link>
-        }
+        actions={<PanelLink to="/sala-de-espera">Abrir</PanelLink>}
       />
       {queue.isPending ? (
-        <div className="p-4">
+        <div className="p-4 md:px-5">
           <TextSkeleton lines={3} />
         </div>
       ) : queue.isError ? (
-        <div className="p-4">
+        <div className="p-4 md:px-5">
           <InlineError
             error={queue.error}
             onRetry={() => void queue.refetch()}
@@ -500,11 +439,15 @@ function QueuePreview() {
         />
       ) : (
         <ol className="divide-y divide-border-subtle">
-          {queue.data.slice(0, 5).map((item) => (
+          {queue.data.slice(0, 5).map((item, index) => (
             <li
               key={item.appointmentId}
               className="flex items-center gap-3 px-4 py-2.5 md:px-5"
             >
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-sunken font-mono text-micro font-semibold text-ink-secondary">
+                <span className="sr-only">Posição </span>
+                {index + 1}
+              </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-body font-semibold text-ink-primary">
                   {item.patientName}
@@ -515,10 +458,11 @@ function QueuePreview() {
               </div>
               <span
                 className={cn(
-                  "font-mono text-label font-semibold",
+                  "inline-flex shrink-0 items-center gap-1.5 font-mono text-label font-semibold tabular-nums",
                   item.isLate ? "text-danger" : "text-warning",
                 )}
               >
+                <Dot pulse />
                 {item.waitingLabel}
               </span>
             </li>
@@ -529,36 +473,47 @@ function QueuePreview() {
   );
 }
 
-/** Pendências que vencem hoje. */
-function UrgentTasks() {
-  const query = { limit: 5, dueBefore: todayISO() };
-  const tasks = useQuery({
-    queryKey: qk.tasks.list(query),
-    queryFn: () => tasksApi.list(query),
+const RESCUE_TYPES: TaskType[] = ["RESGATE_NO_SHOW", "CONFIRMACAO_PENDENTE"];
+
+/**
+ * Resgates do dia: faltas a recuperar e confirmações pendentes que vencem até
+ * hoje. Sem nenhum resgate, o painel volta a ser "Vencem até hoje" com as
+ * demais pendências — a coluna nunca fica com um painel vazio à toa.
+ */
+function RescueTasks({ className }: { className?: string }) {
+  const today = todayISO();
+  const rescueQuery: ListTasksQuery = {
+    limit: 5,
+    dueBefore: today,
+    type: RESCUE_TYPES,
+  };
+  const rescues = useQuery({
+    queryKey: qk.tasks.list(rescueQuery),
+    queryFn: () => tasksApi.list(rescueQuery),
   });
+  const fallback = rescues.isSuccess && rescues.data.data.length === 0;
+  const dueQuery: ListTasksQuery = { limit: 5, dueBefore: today };
+  const due = useQuery({
+    queryKey: qk.tasks.list(dueQuery),
+    queryFn: () => tasksApi.list(dueQuery),
+    enabled: fallback,
+  });
+  const tasks = fallback ? due : rescues;
 
   return (
-    <Panel aria-labelledby="pendencias-hoje">
+    <Panel aria-labelledby="pendencias-hoje" className={className}>
       <PanelHeader
         id="pendencias-hoje"
-        title="Vencem até hoje"
+        title={fallback ? "Vencem até hoje" : "Resgates do dia"}
         count={tasks.data ? String(tasks.data.meta.itemCount) : undefined}
-        actions={
-          <Link
-            to="/pendencias"
-            className="inline-flex items-center gap-0.5 rounded-marker text-label font-semibold text-accent-ink hover:underline"
-          >
-            Ver todas
-            <ChevronRight className="size-4" aria-hidden="true" />
-          </Link>
-        }
+        actions={<PanelLink to="/pendencias">Ver todas</PanelLink>}
       />
       {tasks.isPending ? (
-        <div className="p-4">
+        <div className="p-4 md:px-5">
           <TextSkeleton lines={3} />
         </div>
       ) : tasks.isError ? (
-        <div className="p-4">
+        <div className="p-4 md:px-5">
           <InlineError
             error={tasks.error}
             onRetry={() => void tasks.refetch()}
@@ -567,28 +522,64 @@ function UrgentTasks() {
       ) : tasks.data.data.length === 0 ? (
         <EmptyState
           compact
-          icon={ClipboardList}
+          icon={fallback ? ClipboardList : LifeBuoy}
           title="Nada vencendo"
-          description="Retornos e confirmações com prazo para hoje aparecem aqui."
+          description="Retornos, resgates de falta e confirmações com prazo para hoje aparecem aqui."
         />
       ) : (
         <ul className="divide-y divide-border-subtle">
           {tasks.data.data.map((task) => (
-            <li key={task.id} className="px-4 py-2.5 md:px-5">
-              <Link
-                to={`/pacientes/${task.patientId}`}
-                className="block truncate text-body font-semibold text-ink-primary hover:text-accent-ink hover:underline"
-              >
-                {task.patientName}
-              </Link>
-              <p className="truncate text-label text-ink-secondary">
-                {task.title}
-              </p>
-            </li>
+            <TaskRow key={task.id} task={task} />
           ))}
         </ul>
       )}
     </Panel>
+  );
+}
+
+function TaskRow({ task }: { task: TaskItem }) {
+  return (
+    <li className="flex items-start gap-3 px-4 py-2.5 md:px-5">
+      <span
+        className={cn(
+          "mt-2 flex",
+          task.isUrgent ? "text-danger" : "text-ink-tertiary",
+        )}
+      >
+        <Dot className="size-2" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <Link
+          to={`/pacientes/${task.patientId}`}
+          className="block truncate text-body font-semibold text-ink-primary hover:text-accent-ink hover:underline"
+        >
+          {task.patientName}
+        </Link>
+        <p className="truncate text-label text-ink-secondary">
+          {TASK_TYPE_LABEL[task.type]} · {task.title}
+        </p>
+      </div>
+      <span
+        className={cn(
+          "shrink-0 text-label font-semibold",
+          task.isUrgent ? "text-danger" : "text-ink-tertiary",
+        )}
+      >
+        {task.dueLabel}
+      </span>
+    </li>
+  );
+}
+
+function PanelLink({ to, children }: { to: string; children: string }) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex items-center gap-0.5 rounded-marker text-label font-semibold text-accent-ink hover:underline pointer-coarse:min-h-11"
+    >
+      {children}
+      <ChevronRight className="size-4" aria-hidden="true" />
+    </Link>
   );
 }
 

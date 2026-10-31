@@ -10,7 +10,7 @@ export interface BackTarget {
  * "Voltar" sozinho obriga a pessoa a lembrar de onde veio.
  */
 const LABEL_BY_PREFIX: [RegExp, string][] = [
-  [/^\/$/, "Painel do dia"],
+  [/^\/$/, "Cockpit do dia"],
   [/^\/agenda/, "Agenda"],
   [/^\/sala-de-espera/, "Sala de espera"],
   [/^\/pacientes\/[^/]+/, "Ficha do paciente"],
@@ -22,7 +22,7 @@ const LABEL_BY_PREFIX: [RegExp, string][] = [
   [/^\/consultas\/(?!nova)[^/]+/, "Consulta anterior"],
 ];
 
-const FALLBACK: BackTarget = { to: "/", label: "Painel do dia" };
+const FALLBACK: BackTarget = { to: "/", label: "Cockpit do dia" };
 
 /** Só caminho interno: `//site.com` ou `https://` no estado não vira link. */
 function isInternalPath(value: unknown): value is string {
@@ -42,7 +42,7 @@ export function labelForPath(path: string): string {
 
 /**
  * Para onde o "voltar" leva. Quem abre uma consulta pode passar
- * `state={{ from: "/agenda?..." }}` no link; sem isso, cai no painel.
+ * `state={{ from: "/agenda?..." }}` no link; sem isso, cai no Cockpit.
  */
 export function backTargetFrom(
   location: Location,

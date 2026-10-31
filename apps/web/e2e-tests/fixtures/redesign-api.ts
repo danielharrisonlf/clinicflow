@@ -199,6 +199,19 @@ const appointments = [
     allowedTransitions: ["CONFIRMADA", "CHECK_IN", "REAGENDADA", "CANCELADA"],
   }),
   appointment({
+    id: "a7",
+    code: 1044,
+    time: "11:30",
+    status: "AGENDADA",
+    stateLabel: "A confirmar",
+    patientId: "p6",
+    patientName: "Beatriz Nogueira Alves",
+    professionalId: "d3",
+    professionalName: "Dra. Camila Sousa",
+    type: "AVALIACAO",
+    allowedTransitions: ["CONFIRMADA", "CHECK_IN", "REAGENDADA", "CANCELADA"],
+  }),
+  appointment({
     id: "a5",
     code: 1042,
     time: "10:30",
@@ -368,6 +381,59 @@ const tasks = [
   },
 ];
 
+/** Histórico de WhatsApp, mais recente primeiro (como o backend ordena). */
+function notification(input: {
+  id: string;
+  appointmentId: string;
+  status: string;
+  at: string;
+  error?: string | null;
+}) {
+  const row = appointments.find((item) => item.id === input.appointmentId);
+  return {
+    id: input.id,
+    appointmentId: input.appointmentId,
+    channel: "WHATSAPP",
+    to: row?.patientPhone ?? patient.phone,
+    body: `Olá ${row?.patientName.split(" ")[0] ?? ""}, confirme sua consulta às ${row?.time ?? ""}.`,
+    status: input.status,
+    error: input.error ?? null,
+    sentAt:
+      input.status === "PENDENTE" || input.status === "FALHOU"
+        ? null
+        : input.at,
+    createdAt: input.at,
+  };
+}
+
+const initialNotifications = () => [
+  notification({
+    id: "n4",
+    appointmentId: "a7",
+    status: "FALHOU",
+    at: `${clinicToday}T11:20:00.000Z`,
+    error: "O número não tem WhatsApp.",
+  }),
+  notification({
+    id: "n3",
+    appointmentId: "a4",
+    status: "SIMULADA",
+    at: `${clinicToday}T11:05:00.000Z`,
+  }),
+  notification({
+    id: "n2",
+    appointmentId: "a3",
+    status: "RESPONDIDA",
+    at: `${clinicToday}T10:40:00.000Z`,
+  }),
+  notification({
+    id: "n1",
+    appointmentId: "a4",
+    status: "PENDENTE",
+    at: `${clinicToday}T10:00:00.000Z`,
+  }),
+];
+
 const settings = {
   clinicName: "Clínica Viver",
   timezone: "America/Sao_Paulo",
@@ -410,6 +476,7 @@ export async function installRedesignApi(
 ): Promise<RedesignApi> {
   const state: RedesignApi = { unknownRequests: [], requested: [] };
   let pageTwoConfirmed = false;
+  const notifications = initialNotifications();
 
   await page.route("**/api/v1/**", async (route: Route) => {
     const request = route.request();
@@ -797,6 +864,34 @@ export async function installRedesignApi(
     const taskAction = path.match(/^\/tasks\/([^/]+)\/(resolve|contact)$/);
     if (taskAction)
       return json(tasks.find((item) => item.id === taskAction[1]) ?? tasks[0]);
+    if (path === "/notifications" && method === "GET") {
+      const appointmentId = url.searchParams.get("appointmentId");
+      return json(
+        pageOf(
+          notifications.filter(
+            (item) => !appointmentId || item.appointmentId === appointmentId,
+          ),
+          url.searchParams,
+          10,
+        ),
+      );
+    }
+    const resend = path.match(
+      /^\/notifications\/appointments\/([^/]+)\/confirmation$/,
+    );
+    if (resend && method === "POST") {
+      const id = resend[1] ?? "a4";
+      // Transporte `log`: o envio vira SIMULADA na hora, mais recente no topo.
+      notifications.unshift(
+        notification({
+          id: `n${notifications.length + 1}`,
+          appointmentId: id,
+          status: "SIMULADA",
+          at: new Date().toISOString(),
+        }),
+      );
+      return route.fulfill({ status: 202, body: "" });
+    }
     if (path === "/settings" && method === "GET") return json(settings);
     if (path === "/settings" && method === "PATCH") return json(settings);
     if (path === "/settings/whatsapp" && method === "GET")

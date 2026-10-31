@@ -3,6 +3,7 @@ import type {
   CancelReason,
   Channel,
   DocumentType,
+  NotificationStatus,
   TaskType,
 } from "@/lib/api/types";
 
@@ -48,6 +49,14 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   ENVIO_DOCUMENTO: "Envio de documento",
   AGUARDANDO_EXAME: "Aguardando exame",
   OUTRO: "Outro",
+};
+
+export const NOTIFICATION_STATUS_LABEL: Record<NotificationStatus, string> = {
+  PENDENTE: "Pendente",
+  SIMULADA: "Simulada",
+  ENVIADA: "Enviada",
+  FALHOU: "Falhou",
+  RESPONDIDA: "Respondida",
 };
 
 const MONTHS = [

@@ -18,8 +18,10 @@ import type {
   DocumentType,
   ListAppointmentsQuery,
   ListDocumentsQuery,
+  ListNotificationsQuery,
   ListPatientsQuery,
   ListTasksQuery,
+  NotificationItem,
   Page,
   PageOptions,
   PatientDetail,
@@ -283,6 +285,19 @@ export const settingsApi = {
     whatsappTemplate: string;
   }) =>
     request<WhatsappSettings>("/settings/whatsapp", { method: "PUT", body }),
+};
+
+export const notificationsApi = {
+  /** Histórico de envios, mais recente primeiro. `limit` máximo do backend: 100. */
+  list: (query: ListNotificationsQuery = {}) =>
+    request<Page<NotificationItem>>("/notifications", {
+      query: query as Record<string, string | number>,
+    }),
+  /** 202 sem corpo: o envio entra na fila e aparece no histórico. */
+  resendConfirmation: (appointmentId: string) =>
+    request<void>(`/notifications/appointments/${appointmentId}/confirmation`, {
+      method: "POST",
+    }),
 };
 
 export const searchApi = {

@@ -4,6 +4,7 @@ import type {
   CheckAvailabilityInput,
   ListAppointmentsQuery,
   ListDocumentsQuery,
+  ListNotificationsQuery,
   ListPatientsQuery,
   ListTasksQuery,
   PageOptions,
@@ -82,6 +83,12 @@ export const qk = {
     all: ["tasks"] as const,
     list: (query: ListTasksQuery) => ["tasks", "list", query] as const,
     summary: ["tasks", "summary"] as const,
+  },
+
+  notifications: {
+    all: ["notifications"] as const,
+    list: (query: ListNotificationsQuery) =>
+      ["notifications", "list", query] as const,
   },
 
   settings: {

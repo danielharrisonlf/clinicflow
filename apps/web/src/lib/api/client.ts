@@ -277,7 +277,7 @@ export async function request<T>(
 }
 
 /**
- * Stream de eventos do servidor (painel do dia e sala de espera).
+ * Stream de eventos do servidor (Cockpit do dia e sala de espera).
  *
  * Não usa `EventSource` de propósito: ele não manda header, e o `JwtAuthGuard`
  * só aceita `Authorization: Bearer`. A alternativa seria passar o token na

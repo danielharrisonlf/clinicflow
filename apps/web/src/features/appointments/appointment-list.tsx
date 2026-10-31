@@ -94,7 +94,7 @@ function AppointmentRow({
         // Tablet e desktop: linha.
         "md:grid-cols-[4.5rem_minmax(0,1fr)_auto] md:items-center md:gap-4 md:rounded-none md:border-0 md:px-5 md:py-3 md:shadow-none",
         "lg:grid-cols-[4.5rem_minmax(0,1fr)_9.5rem_11rem]",
-        "transition-colors md:hover:bg-surface-app",
+        "transition-colors md:hover:bg-surface-hover",
       )}
     >
       <div className="flex items-center gap-2 md:block">
@@ -180,7 +180,7 @@ function AppointmentRow({
                 {...props}
                 aria-label={`Mais ações para ${item.patientName}`}
                 disabled={busyHere}
-                className="relative z-10 flex size-9 shrink-0 items-center justify-center rounded-control text-ink-secondary hover:bg-surface-sunken pointer-coarse:size-11"
+                className="relative z-10 flex size-9 shrink-0 items-center justify-center rounded-control text-ink-secondary hover:bg-surface-hover pointer-coarse:size-11"
               >
                 <MoreHorizontal className="size-5" aria-hidden="true" />
               </button>
@@ -207,7 +207,7 @@ function AppointmentRow({
           state={actionState}
           aria-label={`Abrir consulta de ${item.patientName}`}
           title="Abrir consulta"
-          className="hidden size-8 shrink-0 items-center justify-center rounded-control text-ink-tertiary transition-colors hover:bg-surface-sunken hover:text-ink-primary md:flex pointer-coarse:size-11"
+          className="hidden size-8 shrink-0 items-center justify-center rounded-control text-ink-tertiary transition-colors hover:bg-surface-hover hover:text-ink-primary md:flex pointer-coarse:size-11"
         >
           <ChevronRight className="size-4" aria-hidden="true" />
         </Link>

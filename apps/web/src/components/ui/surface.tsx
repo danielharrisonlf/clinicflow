@@ -1,4 +1,5 @@
 import type * as React from "react";
+import { Link, type To } from "react-router";
 import { cn, initials } from "@/lib/utils";
 import { Dot } from "./badge";
 
@@ -84,11 +85,27 @@ export function PanelBody({
   return <div className={cn("px-4 py-4 md:px-5", className)} {...props} />;
 }
 
+const STAT_TONE = {
+  default: "text-ink-primary",
+  accent: "text-accent-ink",
+  revenue: "text-revenue",
+  warning: "text-warning",
+  danger: "text-danger",
+  /** Violeta do "Em atendimento": só para o dot, o valor fica neutro. */
+  atendimento: "text-state-atendimento",
+} as const;
+
+type StatTone = keyof typeof STAT_TONE;
+
 /**
  * Stat card do bento. Anatomia fixa: rótulo em caixa-alta pequena, valor em
  * mono, linha de apoio ("3 sem resposta") e, quando o valor é vivo, um dot
  * de estado. O valor carrega a cor do tom só quando o estado pede atenção.
  * Sem sparkline nem tendência: a interface não inventa série histórica.
+ *
+ * Clicável é atalho, não troféu: `to` vira link (abre em nova aba com ⌘) e
+ * `onClick` vira botão (aplica um filtro na mesma tela). O conteúdo é todo
+ * `span` para continuar HTML válido dentro de `<a>`/`<button>`.
  */
 export function StatTile({
   label,
@@ -97,62 +114,88 @@ export function StatTile({
   tone = "default",
   icon,
   dot,
+  dotTone,
+  to,
+  onClick,
   className,
 }: {
   label: string;
   value: React.ReactNode;
   hint?: React.ReactNode;
-  tone?: "default" | "accent" | "revenue" | "warning" | "danger";
+  tone?: Exclude<StatTone, "atendimento">;
   icon?: React.ReactNode;
   /** Dot ao lado do rótulo, na cor do tom. `pulse` só para o que está vivo agora. */
   dot?: "static" | "pulse";
+  /** Cor do dot quando ela difere da do valor (ex.: atendimento em violeta). */
+  dotTone?: StatTone;
+  /** Atalho para outra tela. */
+  to?: To;
+  /** Atalho na própria tela (aplicar filtro). Ignorado quando há `to`. */
+  onClick?: () => void;
   className?: string;
 }) {
-  const toneClass = {
-    default: "text-ink-primary",
-    accent: "text-accent-ink",
-    revenue: "text-revenue",
-    warning: "text-warning",
-    danger: "text-danger",
-  }[tone];
+  const toneClass = STAT_TONE[tone];
+  const dotClass = dotTone
+    ? STAT_TONE[dotTone]
+    : tone === "default"
+      ? "text-ink-tertiary"
+      : toneClass;
 
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-col gap-2 rounded-card border border-border-subtle bg-surface-base p-4 shadow-panel",
-        className,
-      )}
-    >
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <p className="flex min-w-0 items-center gap-1.5 text-micro font-semibold tracking-wider text-ink-tertiary uppercase">
-          {dot ? (
-            <Dot
-              pulse={dot === "pulse"}
-              className={tone === "default" ? "text-ink-tertiary" : toneClass}
-            />
-          ) : null}
+  const body = (
+    <>
+      <span className="flex min-w-0 items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1.5 text-micro font-semibold tracking-wider text-ink-tertiary uppercase">
+          {dot ? <Dot pulse={dot === "pulse"} className={dotClass} /> : null}
           <span className="truncate">{label}</span>
-        </p>
+        </span>
         {icon ? (
+          // No celular o tile tem meia coluna: o rótulo vale mais que o ícone.
           <span
-            className="flex shrink-0 text-ink-tertiary [&_svg]:size-4"
+            className="flex shrink-0 text-ink-tertiary max-sm:hidden [&_svg]:size-4"
             aria-hidden="true"
           >
             {icon}
           </span>
         ) : null}
-      </div>
-      <p
+      </span>
+      <span
         className={cn(
-          "font-mono text-metric-sm font-semibold tracking-tight tabular-nums md:text-metric",
+          "block font-mono text-metric-sm font-semibold tracking-tight tabular-nums md:text-metric",
           toneClass,
         )}
       >
         {value}
-      </p>
-      {hint ? <p className="text-label text-ink-secondary">{hint}</p> : null}
-    </div>
+      </span>
+      {hint ? (
+        <span className="block text-label text-ink-secondary">{hint}</span>
+      ) : null}
+    </>
   );
+
+  const base =
+    "flex min-w-0 flex-col gap-2 rounded-card border border-border-subtle bg-surface-base p-4 text-left shadow-panel";
+  const interactive =
+    "transition-[background-color,border-color,transform] duration-150 hover:border-border-default hover:bg-surface-hover active:translate-y-px";
+
+  if (to !== undefined) {
+    return (
+      <Link to={to} className={cn(base, interactive, className)}>
+        {body}
+      </Link>
+    );
+  }
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(base, interactive, className)}
+      >
+        {body}
+      </button>
+    );
+  }
+  return <div className={cn(base, className)}>{body}</div>;
 }
 
 /** Lista rótulo/valor para fichas e detalhes. */

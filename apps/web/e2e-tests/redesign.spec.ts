@@ -182,6 +182,58 @@ test("o balcão preserva filtro no detalhe e não empilha ações de consulta", 
   expect(api.unknownRequests).toEqual([]);
 });
 
+test("prevenção de faltas correlaciona envios numa chamada e reenvia o WhatsApp", async ({
+  page,
+}) => {
+  const api = await installRedesignApi(page);
+  await prepareAuthenticatedPage(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const panel = page.getByRole("region", { name: "Prevenção de faltas" });
+  const failed = panel.getByRole("listitem").filter({
+    hasText: "Beatriz Nogueira Alves",
+  });
+  await expect(failed).toContainText("Crítico");
+  await expect(failed).toContainText("Último envio: Falhou");
+  await expect(
+    panel.getByRole("listitem").filter({ hasText: "Maria Silva Rodrigues" }),
+  ).toContainText("Último envio: Simulada");
+
+  // Uma página do histórico para o painel inteiro, nunca uma por consulta.
+  const notificationReads = () =>
+    api.requested.filter((request) => request.startsWith("GET /notifications"));
+  expect(notificationReads()).toHaveLength(1);
+  expect(notificationReads()[0]).not.toContain("appointmentId");
+
+  await failed.getByRole("button", { name: /Reenviar WhatsApp/ }).click();
+  await expect(
+    page.getByText("Confirmação reenviada", { exact: true }),
+  ).toBeVisible();
+  expect(api.requested).toContain(
+    "POST /notifications/appointments/a7/confirmation",
+  );
+  await expect(failed).toContainText("Último envio: Simulada");
+  expect(notificationReads()).toHaveLength(2);
+
+  // Na folha da consulta: histórico só daquela consulta e o mesmo reenvio.
+  await panel.getByRole("link", { name: "Maria Silva Rodrigues" }).click();
+  const sheet = page.getByRole("dialog", { name: "Maria Silva Rodrigues" });
+  const confirmation = sheet.getByRole("region", {
+    name: "Confirmação WhatsApp",
+  });
+  await expect(confirmation).toContainText("2 envios");
+  await expect(confirmation).toContainText("Simulada");
+  await expect(confirmation).toContainText("Pendente");
+  await expect(
+    confirmation.getByRole("button", { name: "Reenviar WhatsApp" }),
+  ).toBeVisible();
+  expect(api.requested).toContain(
+    "GET /notifications?appointmentId=a4&limit=20",
+  );
+  expect(api.unknownRequests).toEqual([]);
+});
+
 test("atalhos param em campos e overlays e a busca fecha com Escape", async ({
   page,
 }) => {
@@ -251,7 +303,9 @@ test("busca de pacientes mantém o filtro e reduz a página fora do intervalo", 
     .toBeTruthy();
 
   await page.goto("/pendencias?pagina=2");
-  await expect(page.getByRole("heading", { name: "Pendências" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: /^Pendências/ }),
+  ).toBeVisible();
   await expect
     .poll(() => new URL(page.url()).searchParams.get("pagina"))
     .toBeNull();

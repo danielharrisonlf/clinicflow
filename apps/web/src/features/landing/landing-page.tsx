@@ -181,7 +181,7 @@ export function LandingPage() {
             <figure className="landing-hero-visual">
               <div className="landing-hero-visual-header">
                 <span>ClinicFlow</span>
-                <span>Painel do dia</span>
+                <span>Cockpit do dia</span>
               </div>
               <picture>
                 <source

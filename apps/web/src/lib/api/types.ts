@@ -490,6 +490,36 @@ export interface WhatsappSettings {
   transport: string;
 }
 
+/**
+ * Vida de um envio de WhatsApp. `SIMULADA` é o transporte `log` (dev): a
+ * mensagem não saiu, mas para a recepção conta como enviada.
+ */
+export const NOTIFICATION_STATUS = [
+  "PENDENTE",
+  "SIMULADA",
+  "ENVIADA",
+  "FALHOU",
+  "RESPONDIDA",
+] as const;
+export type NotificationStatus = (typeof NOTIFICATION_STATUS)[number];
+
+export interface NotificationItem {
+  id: string;
+  appointmentId: string | null;
+  channel: Channel;
+  to: string;
+  body: string;
+  status: NotificationStatus;
+  error: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+/** O backend ordena por `createdAt` desc e ignora `order`/`orderBy` aqui. */
+export interface ListNotificationsQuery extends PageOptions {
+  appointmentId?: string;
+}
+
 export interface SearchAction {
   /** `new-appointment`, `open-waiting-room`, `new-patient`. */
   id: string;

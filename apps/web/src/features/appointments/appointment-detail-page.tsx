@@ -11,8 +11,13 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation, useParams } from "react-router";
-import { Badge } from "@/components/ui/badge";
-import { Button, ButtonAnchor, ButtonLink } from "@/components/ui/button";
+import { Badge, Dot } from "@/components/ui/badge";
+import {
+  Button,
+  ButtonAnchor,
+  ButtonLink,
+  buttonVariants,
+} from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Field, TextareaField } from "@/components/ui/field";
 import { Menu, MenuItem } from "@/components/ui/menu";
@@ -35,6 +40,7 @@ import { cn, plural, whatsappUrl } from "@/lib/utils";
 import { AppointmentHistory } from "./appointment-history";
 import { backTargetFrom, currentPath } from "./back-target";
 import { CancelPanel } from "./cancel-panel";
+import { ConfirmationPanel } from "./confirmation-panel";
 import {
   APPOINTMENT_TYPE_LABEL,
   CANCEL_REASON_LABEL,
@@ -289,10 +295,9 @@ function DetailView({
                       type="button"
                       {...props}
                       disabled={transition.isPending}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-control border border-border-default bg-surface-base px-3 text-body font-semibold text-ink-primary hover:bg-surface-sunken"
+                      className={buttonVariants({ variant: "secondary" })}
                     >
-                      <MoreHorizontal className="size-4" aria-hidden="true" />{" "}
-                      Outras ações
+                      <MoreHorizontal aria-hidden="true" /> Outras ações
                     </button>
                   )}
                 >
@@ -471,6 +476,7 @@ function DetailView({
 
         <div className="flex min-w-0 flex-col gap-5">
           <Lifecycle data={data} />
+          <ConfirmationPanel data={data} />
           <AppointmentHistory appointmentId={data.id} />
         </div>
       </div>
@@ -547,20 +553,30 @@ function Lifecycle({ data }: { data: AppointmentDetail }) {
   return (
     <Panel aria-labelledby="consulta-andamento">
       <PanelHeader id="consulta-andamento" title="Andamento" />
-      <ol className="flex flex-col gap-2 px-4 py-3 md:px-5">
+      <ol className="flex flex-col gap-2.5 px-4 py-3.5 md:px-5">
         {steps.map((step) => (
           <li
             key={step.label}
-            className="flex items-baseline justify-between gap-3"
+            className="flex items-center justify-between gap-3"
           >
             <span
               className={cn(
-                "text-body",
+                "inline-flex items-center gap-2 text-body",
                 step.at
                   ? "font-semibold text-ink-primary"
                   : "text-ink-tertiary",
               )}
             >
+              <Dot
+                className={cn(
+                  "size-2",
+                  !step.at
+                    ? "text-border-strong"
+                    : step.label === "Cancelada"
+                      ? "text-state-cancelada"
+                      : "text-revenue",
+                )}
+              />
               {step.label}
             </span>
             {step.at ? (
@@ -702,7 +718,7 @@ function DetailSkeleton({ back }: { back: { to: string; label: string } }) {
               <div className="skeleton h-10 w-44 rounded-control" />
               <div className="skeleton h-10 w-32 rounded-control" />
             </div>
-            <div className="rounded-card border border-border-subtle bg-surface-base p-5">
+            <div className="rounded-card border border-border-subtle bg-surface-base p-5 shadow-panel">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {Array.from({ length: 6 }, (_, index) => (
                   <div key={index} className="flex flex-col gap-2">
@@ -713,7 +729,7 @@ function DetailSkeleton({ back }: { back: { to: string; label: string } }) {
               </div>
             </div>
           </div>
-          <div className="rounded-card border border-border-subtle bg-surface-base p-5">
+          <div className="rounded-card border border-border-subtle bg-surface-base p-5 shadow-panel">
             <div className="flex flex-col gap-3">
               {Array.from({ length: 4 }, (_, index) => (
                 <div key={index} className="skeleton h-4 w-full" />

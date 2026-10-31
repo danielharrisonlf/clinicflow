@@ -20,7 +20,7 @@ próximo clique*. O vocabulário da interface segue esses pilares:
 |---|---|
 | Dashboard `/` | **Cockpit do dia** (nav: "Cockpit") |
 | Rastreio de confirmações WhatsApp (API `GET notifications`) | **Prevenção de faltas** |
-| Risco derivado da confirmação | `Confirmada` / `Sem resposta` / `Crítico` (sem resposta e consulta em <24h) |
+| Risco derivado da confirmação | `Confirmada` / `Sem resposta` / `Crítico` (sem envio, falha, ou sem resposta e consulta em <3h) |
 | Fila da recepção | **Sala de espera** (ao vivo, SSE) |
 | Tarefas RESGATE_NO_SHOW / CONFIRMACAO_PENDENTE | **Resgates** — linguagem de recuperação, não de burocracia |
 
@@ -132,8 +132,10 @@ Concluída e cancelada recuam visualmente: já saíram da fila de trabalho.
 
 Derivado no front a partir de `NotificationStatus` + horário da consulta:
 `RESPONDIDA` → dot esmeralda "Confirmada pelo paciente"; `ENVIADA`/`SIMULADA` sem
-resposta → dot âmbar "Sem resposta"; `PENDENTE`/`FALHOU`, ou sem resposta a <24h da
-consulta → dot rosa pulsando "Crítico". Ação da linha: reenviar confirmação
+resposta → dot âmbar "Sem resposta"; `PENDENTE`/`FALHOU`, nenhum envio, ou sem
+resposta a <3h da consulta → dot rosa pulsando "Crítico". A janela de 3h (e não 24h)
+existe para que "Sem resposta" apareça nas consultas do próprio dia e ainda sobre
+tempo de ligar e reencaixar (`CRITICAL_WINDOW_HOURS` em `no-show-risk.ts`). Ação da linha: reenviar confirmação
 (`POST notifications/appointments/:id/confirmation`).
 
 ## Forma, espaço e elevação
