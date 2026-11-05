@@ -6,9 +6,11 @@ import { ErrorCode } from "../../../common/constants/error-codes";
 import { AppException } from "../../../common/exceptions/app.exception";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-user.interface";
 import { ClinicTime } from "../../../common/utils/clinic-time.util";
+import { isAppointmentOverlapViolation } from "../../../common/utils/prisma-errors.util";
 import { AuditService } from "../../../shared/audit/audit.service";
 import { DomainEvent } from "../../../shared/events/domain-events";
 import { PrismaService } from "../../../shared/prisma/prisma.service";
+import { OVERBOOKING_REASON } from "../appointment-overbooking";
 import { AvailabilityService } from "../availability.service";
 import { AppointmentDetailDto } from "../dto/appointment-response.dto";
 import { CreateAppointmentRequest } from "../requests/create-appointment.request";
@@ -45,17 +47,62 @@ export class CreateAppointmentService {
     const startsAt = ClinicTime.combine(dto.date, dto.time);
     const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
 
-    await this.assertSlotIsFree({
+    const slot = {
       professionalId: dto.professionalId,
       professionalName: professional.name,
       startsAt,
       endsAt,
       time: dto.time,
       durationMinutes,
-      allowOverbooking: dto.allowOverbooking ?? false,
+    };
+    const allowOverbooking = dto.allowOverbooking ?? false;
+    const conflict = await this.assertSlotIsFree({ ...slot, allowOverbooking });
+
+    // Só é encaixe quando de fato sobrepõe: marcar toda consulta que veio com
+    // a flag tiraria da trava do banco horários que estavam livres, e uma
+    // corrida posterior pelo mesmo horário passaria sem 409.
+    let isOverbooked = allowOverbooking && conflict !== null;
+    const id = uuidv7();
+
+    try {
+      await this.persist(id, dto, actor, startsAt, endsAt, isOverbooked);
+    } catch (error) {
+      if (!isAppointmentOverlapViolation(error)) throw error;
+      // Outra recepcionista gravou o horário entre a checagem e o INSERT.
+      if (!allowOverbooking || isOverbooked) {
+        throw slotConflictException(slot, null);
+      }
+      // A recepção já tinha aceitado encaixar: grava como encaixe.
+      isOverbooked = true;
+      await this.persist(id, dto, actor, startsAt, endsAt, isOverbooked);
+    }
+
+    await this.audit.record({
+      actor,
+      action: "appointment.created",
+      entity: "Appointment",
+      entityId: id,
+      after: {
+        patientId: dto.patientId,
+        professionalId: dto.professionalId,
+        startsAt: startsAt.toISOString(),
+        overbooked: isOverbooked,
+      },
     });
 
-    const id = uuidv7();
+    this.events.emit(DomainEvent.AppointmentCreated, { appointmentId: id });
+    this.logger.log(`Consulta ${id} criada por ${actor.name}`);
+    return this.findByIdService.execute(id);
+  }
+
+  private async persist(
+    id: string,
+    dto: CreateAppointmentRequest,
+    actor: AuthenticatedUser,
+    startsAt: Date,
+    endsAt: Date,
+    isOverbooked: boolean,
+  ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await tx.appointment.create({
         data: {
@@ -68,6 +115,7 @@ export class CreateAppointmentService {
           status: AppointmentStatus.AGENDADA,
           room: dto.room ?? null,
           notes: dto.notes ?? null,
+          isOverbooked,
           createdById: actor.id,
         },
       });
@@ -81,40 +129,16 @@ export class CreateAppointmentService {
           actorId: actor.id,
           actorName: actor.name,
           channel: Channel.WEB,
-          reason: dto.allowOverbooking
-            ? "Encaixe autorizado pela recepção"
-            : null,
+          reason: isOverbooked ? OVERBOOKING_REASON : null,
         },
       });
     });
-
-    await this.audit.record({
-      actor,
-      action: "appointment.created",
-      entity: "Appointment",
-      entityId: id,
-      after: {
-        patientId: dto.patientId,
-        professionalId: dto.professionalId,
-        startsAt: startsAt.toISOString(),
-        overbooked: dto.allowOverbooking ?? false,
-      },
-    });
-
-    this.events.emit(DomainEvent.AppointmentCreated, { appointmentId: id });
-    this.logger.log(`Consulta ${id} criada por ${actor.name}`);
-    return this.findByIdService.execute(id);
   }
 
-  private async assertSlotIsFree(params: {
-    professionalId: string;
-    professionalName: string;
-    startsAt: Date;
-    endsAt: Date;
-    time: string;
-    durationMinutes: number;
-    allowOverbooking: boolean;
-  }): Promise<void> {
+  /** Devolve a primeira consulta sobreposta (ou null) quando o encaixe é permitido. */
+  private async assertSlotIsFree(
+    params: SlotParams & { allowOverbooking: boolean },
+  ) {
     const isWithin = await this.availability.isWithinSchedule(
       params.professionalId,
       params.startsAt,
@@ -132,17 +156,36 @@ export class CreateAppointmentService {
       params.startsAt,
       params.endsAt,
     );
+    const first = overlapping[0] ?? null;
 
-    if (overlapping.length > 0 && !params.allowOverbooking) {
-      throw AppException.conflict(
-        ErrorCode.APPOINTMENT_SLOT_CONFLICT,
-        `O horário das ${params.time} do(a) ${params.professionalName} já está ocupado.`,
-        {
-          conflictWithId: overlapping[0]?.id,
-          patientName: overlapping[0]?.patient.name,
-          durationMinutes: params.durationMinutes,
-        },
-      );
+    if (first && !params.allowOverbooking) {
+      throw slotConflictException(params, first);
     }
+    return first;
   }
+}
+
+interface SlotParams {
+  professionalId: string;
+  professionalName: string;
+  startsAt: Date;
+  endsAt: Date;
+  time: string;
+  durationMinutes: number;
+}
+
+function slotConflictException(
+  params: SlotParams,
+  conflict: { id: string; patient: { name: string } } | null,
+): AppException {
+  return AppException.conflict(
+    ErrorCode.APPOINTMENT_SLOT_CONFLICT,
+    `O horário das ${params.time} do(a) ${params.professionalName} já está ocupado.`,
+    {
+      ...(conflict
+        ? { conflictWithId: conflict.id, patientName: conflict.patient.name }
+        : {}),
+      durationMinutes: params.durationMinutes,
+    },
+  );
 }

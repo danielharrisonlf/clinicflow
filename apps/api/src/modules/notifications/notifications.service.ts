@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ApiProperty } from "@nestjs/swagger";
-import { Channel, NotificationStatus } from "@prisma/client";
+import { Channel, NotificationStatus, Prisma } from "@prisma/client";
 import { uuidv7 } from "uuidv7";
 import { config } from "../../common/config";
 import { PageDto } from "../../common/dto/page.dto";
@@ -21,6 +21,7 @@ export class NotificationResponseDto {
   @ApiProperty() to!: string;
   @ApiProperty() body!: string;
   @ApiProperty({ enum: NotificationStatus }) status!: NotificationStatus;
+  @ApiProperty({ nullable: true, type: String }) error!: string | null;
   @ApiProperty({ nullable: true, type: String }) sentAt!: string | null;
   @ApiProperty() createdAt!: string;
 }
@@ -68,6 +69,7 @@ export class NotificationsService {
         to: notification.to,
         body: notification.body,
         status: notification.status,
+        error: notification.error,
         sentAt: notification.sentAt?.toISOString() ?? null,
         createdAt: notification.createdAt.toISOString(),
       })),
@@ -76,7 +78,10 @@ export class NotificationsService {
   }
 
   /** Monta a mensagem a partir do template da clínica e despacha. */
-  async sendConfirmationRequest(appointmentId: string): Promise<void> {
+  async sendConfirmationRequest(
+    appointmentId: string,
+    options: { automatic?: boolean } = {},
+  ): Promise<void> {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: APPOINTMENT_INCLUDE,
@@ -90,15 +95,35 @@ export class NotificationsService {
       .replace("{{data}}", formatDate(appointment.startsAt))
       .replace("{{hora}}", ClinicTime.timeOf(appointment.startsAt));
 
-    const notification = await this.prisma.notification.create({
-      data: {
-        id: uuidv7(),
-        appointmentId,
-        channel: Channel.WHATSAPP,
-        to: appointment.patient.phone,
-        body,
-      },
-    });
+    // A unique index reserves each appointment/time before any external request.
+    // Manual sends deliberately have no key so reception can retry a failure.
+    const deduplicationKey = options.automatic
+      ? `confirmation:${appointmentId}:${appointment.startsAt.toISOString()}`
+      : null;
+    let notification: { id: string };
+    try {
+      notification = await this.prisma.notification.create({
+        data: {
+          id: uuidv7(),
+          appointmentId,
+          deduplicationKey,
+          channel: Channel.WHATSAPP,
+          to: appointment.patient.phone,
+          body,
+        },
+      });
+    } catch (error) {
+      if (
+        deduplicationKey &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002" &&
+        Array.isArray(error.meta?.target) &&
+        error.meta.target.includes("deduplication_key")
+      ) {
+        return;
+      }
+      throw error;
+    }
 
     await this.dispatch(notification.id, appointment.patient.phone, body);
   }
@@ -108,16 +133,21 @@ export class NotificationsService {
     to: string,
     body: string,
   ): Promise<void> {
-    if (
-      config.notifications.transport === "log" ||
-      !config.notifications.whatsappBaseUrl
-    ) {
+    if (config.notifications.transport === "log") {
       this.logger.log(`[WhatsApp:log] para ${to}: ${body}`);
-      await this.markSent(notificationId);
+      await this.prisma.notification.update({
+        where: { id: notificationId },
+        data: { status: NotificationStatus.SIMULADA },
+      });
       return;
     }
 
     try {
+      if (!config.notifications.whatsappBaseUrl) {
+        throw new Error(
+          "WHATSAPP_BASE_URL não configurada para transporte HTTP.",
+        );
+      }
       await this.http.request({
         url: `${config.notifications.whatsappBaseUrl}/messages`,
         method: "POST",
@@ -125,6 +155,7 @@ export class NotificationsService {
           ? { authorization: `Bearer ${config.notifications.whatsappToken}` }
           : {},
         body: { to, text: body },
+        retries: 0,
       });
       await this.markSent(notificationId);
     } catch (error) {

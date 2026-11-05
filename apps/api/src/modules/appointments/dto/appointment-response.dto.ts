@@ -58,6 +58,13 @@ export class AppointmentListItemDto {
   @ApiPropertyOptional({ nullable: true, type: String }) notes!: string | null;
 
   @ApiProperty({
+    description:
+      "Encaixe: gravada por cima de outra consulta com allowOverbooking. Só é true quando o horário de fato estava ocupado.",
+    example: false,
+  })
+  isOverbooked!: boolean;
+
+  @ApiProperty({
     enum: AppointmentStatus,
     isArray: true,
     description: "Transições permitidas — o front acende só os botões válidos",

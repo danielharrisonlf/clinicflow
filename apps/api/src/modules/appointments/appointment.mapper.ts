@@ -70,6 +70,7 @@ export function toAppointmentListItem(
     professionalName: appointment.professional.name,
     room: appointment.room,
     notes: appointment.notes,
+    isOverbooked: appointment.isOverbooked,
     allowedTransitions: AppointmentStateMachine.allowedFrom(appointment.status),
   };
 }
@@ -103,8 +104,10 @@ export function toAppointmentEvent(
     id: event.id,
     fromStatus: event.fromStatus,
     toStatus: event.toStatus,
+    // A compensação vai do estado desfeito (`fromStatus`) de volta ao anterior:
+    // o título nomeia o que foi desfeito, não o estado restaurado.
     title: event.isCompensation
-      ? `${EVENT_TITLE[event.toStatus]} (desfeito)`
+      ? `${EVENT_TITLE[event.fromStatus ?? event.toStatus]} (desfeito)`
       : EVENT_TITLE[event.toStatus],
     actorName: event.actorName,
     channel: event.channel,

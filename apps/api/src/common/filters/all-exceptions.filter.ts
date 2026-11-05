@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import { Request, Response } from "express";
 import { ErrorCode, ErrorCodeValue } from "../constants/error-codes";
 import { AppException } from "../exceptions/app.exception";
+import { isAppointmentOverlapViolation } from "../utils/prisma-errors.util";
 
 interface ErrorEnvelope {
   statusCode: number;
@@ -59,6 +60,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
         code: exception.code,
         message: this.messageOf(exception),
         ...(exception.details ? { details: exception.details } : {}),
+      };
+    }
+
+    // Rede de segurança: os serviços de agenda já traduzem a trava com a
+    // mensagem do horário; qualquer outro caminho que bata nela vira 409, não 500.
+    if (isAppointmentOverlapViolation(exception)) {
+      return {
+        ...base,
+        statusCode: HttpStatus.CONFLICT,
+        code: ErrorCode.APPOINTMENT_SLOT_CONFLICT,
+        message:
+          "O horário acabou de ser ocupado por outra consulta. Atualize a agenda e tente novamente.",
       };
     }
 

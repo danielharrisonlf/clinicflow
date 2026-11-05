@@ -34,6 +34,16 @@ function plusMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60_000);
 }
 
+/**
+ * Carimbo de evento nunca no futuro. Rodada de madrugada, a semente gravava o
+ * check-in das 09:32 como já acontecido, e esse evento "futuro" passava na
+ * frente de qualquer transição real do dia.
+ */
+const seededAt = new Date();
+function notAfterNow(date: Date): Date {
+  return date.getTime() > seededAt.getTime() ? seededAt : date;
+}
+
 async function main(): Promise<void> {
   console.log("🌱 Semeando a Clínica Viver…");
 
@@ -374,7 +384,7 @@ async function main(): Promise<void> {
               actorId: recepcao.id,
               actorName: recepcao.name,
               channel: "WEB",
-              createdAt: plusMinutes(startsAt, -4320),
+              createdAt: notAfterNow(plusMinutes(startsAt, -4320)),
             },
             ...(seed.status === AppointmentStatus.AGENDADA
               ? []
@@ -385,7 +395,7 @@ async function main(): Promise<void> {
                     toStatus: AppointmentStatus.CONFIRMADA,
                     actorName: "WhatsApp automatizado",
                     channel: "WHATSAPP" as const,
-                    createdAt: plusMinutes(startsAt, -2880),
+                    createdAt: notAfterNow(plusMinutes(startsAt, -2880)),
                   },
                 ]),
             ...(seed.checkInOffsetMinutes === undefined
@@ -398,7 +408,9 @@ async function main(): Promise<void> {
                     actorId: recepcao.id,
                     actorName: recepcao.name,
                     channel: "WEB" as const,
-                    createdAt: plusMinutes(startsAt, seed.checkInOffsetMinutes),
+                    createdAt: notAfterNow(
+                      plusMinutes(startsAt, seed.checkInOffsetMinutes),
+                    ),
                   },
                 ]),
           ],

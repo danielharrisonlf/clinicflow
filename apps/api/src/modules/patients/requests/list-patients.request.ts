@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { z } from "zod";
+import { ZodRequest } from "../../../common/decorators/zod-request.decorator";
 import { Order, PageOptionsDto } from "../../../common/dto/page-options.dto";
 
 export const ListPatientsQuerySchema = z.object({
@@ -28,6 +29,12 @@ export const ListPatientsQuerySchema = z.object({
 
 export type ListPatientsQuery = z.infer<typeof ListPatientsQuerySchema>;
 
+/**
+ * Validada pelo schema do Zod no controller; `@ZodRequest()` impede o pipe
+ * global de reaplicar o class-validator herdado de `PageOptionsDto` e faz o
+ * pipe do Zod devolver uma instância (com `skip` e `direction`).
+ */
+@ZodRequest()
 export class ListPatientsQueryRequest
   extends PageOptionsDto
   implements ListPatientsQuery

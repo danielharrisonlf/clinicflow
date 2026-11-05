@@ -6,9 +6,14 @@ import { Spinner } from "./spinner";
 
 const buttonVariants = cva(
   [
-    "inline-flex items-center justify-center gap-2 whitespace-nowrap select-none",
-    "rounded-control font-semibold transition-colors duration-150",
-    "disabled:pointer-events-none disabled:opacity-45",
+    "relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap select-none",
+    "rounded-control font-medium",
+    "transition-[background-color,border-color,color,box-shadow,transform] duration-150",
+    // Pressionado desce 1px: o clique tem corpo sem animação de enfeite.
+    "active:translate-y-px",
+    "disabled:pointer-events-none disabled:opacity-50",
+    "aria-disabled:pointer-events-none aria-disabled:opacity-50",
+    "[&_svg]:size-4 [&_svg]:shrink-0",
     // Alvo de toque: 44px em ponteiro grosso, sem inchar o desktop.
     "pointer-coarse:min-h-11",
   ],
@@ -18,30 +23,42 @@ const buttonVariants = cva(
         primary:
           "bg-accent text-ink-onaccent hover:bg-accent-hover active:bg-accent-active",
         secondary:
-          "bg-surface-base text-ink-primary border border-border-default hover:bg-surface-app active:bg-surface-sunken",
+          "border border-border-default bg-surface-base text-ink-primary hover:border-border-strong hover:bg-surface-hover active:bg-surface-sunken",
         ghost:
-          "bg-transparent text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary active:bg-border-subtle",
+          "bg-transparent text-ink-secondary hover:bg-surface-hover hover:text-ink-primary active:bg-surface-sunken",
         destructive:
-          "bg-state-atrasada text-ink-onaccent hover:brightness-95 active:brightness-90",
+          "bg-danger-fill text-ink-onaccent hover:bg-danger-fill-hover",
+        "destructive-ghost":
+          "bg-transparent text-danger hover:bg-danger-weak active:bg-danger-weak",
+        link: "h-auto px-0 text-accent-ink underline-offset-4 hover:underline active:translate-y-0",
       },
       size: {
-        sm: "h-9 px-3 text-micro",
-        md: "h-10 px-4 text-body",
-        lg: "h-11 px-6 text-card",
-        icon: "size-10 px-0",
+        sm: "h-9 px-3 text-label",
+        md: "h-10 px-4 text-label",
+        lg: "h-11 px-5 text-card",
+        icon: "size-10 px-0 [&_svg]:size-4.5",
+        "icon-sm": "size-9 px-0 pointer-coarse:min-w-11",
       },
       block: { true: "w-full", false: "" },
     },
+    compoundVariants: [{ variant: "link", className: "h-auto px-0" }],
     defaultVariants: { variant: "primary", size: "md", block: false },
   },
 );
 
+export type ButtonVariants = VariantProps<typeof buttonVariants>;
+
 export interface ButtonProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "color">,
-    VariantProps<typeof buttonVariants> {
+    ButtonVariants {
   loading?: boolean;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
+/**
+ * Botão. Carregando mantém a largura (o rótulo fica, o spinner entra antes) e
+ * usa `aria-busy` — a pessoa vê que o clique foi aceito e não clica de novo.
+ */
 export function Button({
   className,
   variant,
@@ -56,8 +73,6 @@ export function Button({
   return (
     <button
       type={type}
-      // Botão desabilitado sai da ordem de tabulação e nunca é anunciado.
-      // Durante o envio isso é aceitável — é estado transitório, não regra.
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(buttonVariants({ variant, size, block }), className)}
@@ -66,6 +81,30 @@ export function Button({
       {loading ? <Spinner className="size-4" /> : null}
       {children}
     </button>
+  );
+}
+
+/**
+ * Botão só com ícone. O rótulo é obrigatório no tipo: ícone sem nome
+ * acessível é um botão mudo para leitor de tela.
+ */
+export function IconButton({
+  label,
+  variant = "ghost",
+  size = "icon",
+  children,
+  ...props
+}: Omit<ButtonProps, "aria-label"> & { label: string }) {
+  return (
+    <Button
+      variant={variant}
+      size={size}
+      aria-label={label}
+      title={label}
+      {...props}
+    >
+      {children}
+    </Button>
   );
 }
 
@@ -80,9 +119,25 @@ export function ButtonLink({
   size,
   block,
   ...props
-}: React.ComponentProps<typeof Link> & VariantProps<typeof buttonVariants>) {
+}: React.ComponentProps<typeof Link> & ButtonVariants) {
   return (
     <Link
+      className={cn(buttonVariants({ variant, size, block }), className)}
+      {...props}
+    />
+  );
+}
+
+/** Link externo (tel:, wa.me) com aparência de botão. */
+export function ButtonAnchor({
+  className,
+  variant,
+  size,
+  block,
+  ...props
+}: React.AnchorHTMLAttributes<HTMLAnchorElement> & ButtonVariants) {
+  return (
+    <a
       className={cn(buttonVariants({ variant, size, block }), className)}
       {...props}
     />

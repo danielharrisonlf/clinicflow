@@ -1,260 +1,585 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Field, SelectField, TextareaField } from "@/components/ui/field";
-import { Panel } from "@/components/ui/surface";
+import { PageHeader } from "@/components/ui/page";
+import { InlineError } from "@/components/ui/states";
+import { Panel, PanelBody, PanelHeader } from "@/components/ui/surface";
 import { useToast } from "@/components/ui/toast";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, errorMessage } from "@/lib/api/client";
 import {
   appointmentsApi,
   patientsApi,
   professionalsApi,
 } from "@/lib/api/endpoints";
-import { APPOINTMENT_TYPE, type AppointmentType } from "@/lib/api/types";
+import {
+  APPOINTMENT_TYPE,
+  type AppointmentType,
+  type CheckAvailabilityInput,
+} from "@/lib/api/types";
 import { qk } from "@/lib/query";
-import { useDebounced } from "@/lib/use-debounced";
-import { APPOINTMENT_TYPE_LABEL, todayISO } from "./labels";
+import { backTargetFrom } from "./back-target";
+import { APPOINTMENT_TYPE_LABEL, formatDayLong, todayISO } from "./labels";
+import { PatientPicker, type PickedPatient } from "./patient-picker";
+import {
+  AvailabilityNotice,
+  dateError,
+  durationError,
+  isDate,
+  isDuration,
+  isPastDate,
+  isTime,
+  TimePicker,
+  useAvailabilityCheck,
+} from "./slot-picker";
+import { useInvalidateAppointmentViews } from "./use-appointment-actions";
+
+type Errors = Partial<
+  Record<
+    | "patientId"
+    | "professionalId"
+    | "date"
+    | "time"
+    | "durationMinutes"
+    | "notes"
+    | "room",
+    string
+  >
+>;
+
+/** Erro do servidor que a tela sabe explicar melhor do que um toast genérico. */
+type ServerProblem =
+  | { kind: "conflict"; message: string }
+  | { kind: "outside"; message: string }
+  | { kind: "other"; message: string };
 
 export function NewAppointmentPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const location = useLocation();
+  const [params] = useSearchParams();
   const toast = useToast();
+  const invalidate = useInvalidateAppointmentViews();
+  const professionalRef = useRef<HTMLDivElement>(null);
 
-  const [patientTerm, setPatientTerm] = useState("");
-  const [patientId, setPatientId] = useState("");
-  const [professionalId, setProfessionalId] = useState("");
-  const [date, setDate] = useState(todayISO());
+  const prefillPatientId = params.get("patientId") ?? "";
+  const prefillDate = params.get("date") ?? "";
+
+  const [patient, setPatient] = useState<PickedPatient | null>(null);
+  const [professionalId, setProfessionalId] = useState(
+    params.get("professionalId") ?? "",
+  );
+  const [date, setDate] = useState(
+    isDate(prefillDate) && !isPastDate(prefillDate) ? prefillDate : todayISO(),
+  );
   const [time, setTime] = useState("");
-  const [type, setType] = useState<AppointmentType>("CONSULTA");
+  const [duration, setDuration] = useState("30");
+  const [durationTouched, setDurationTouched] = useState(false);
+  // `?tipo=RETORNO` vem do funil de pendências ("Agendar retorno").
+  const prefillType = params.get("tipo") as AppointmentType | null;
+  const [type, setType] = useState<AppointmentType>(
+    prefillType && APPOINTMENT_TYPE.includes(prefillType)
+      ? prefillType
+      : "CONSULTA",
+  );
+  const [room, setRoom] = useState("");
   const [notes, setNotes] = useState("");
+  const [errors, setErrors] = useState<Errors>({});
+  const [serverFields, setServerFields] = useState<Errors>({});
+  const [problem, setProblem] = useState<ServerProblem | null>(null);
+  const [focusInvalid, setFocusInvalid] = useState(0);
 
-  const search = useDebounced(patientTerm);
+  // Envio barrado: o foco vai ao primeiro campo com problema, para o aviso não
+  // ficar fora da tela (e o leitor de tela ler o erro junto do campo).
+  useEffect(() => {
+    if (!focusInvalid) return;
+    document
+      .querySelector<HTMLElement>("#nova-consulta [aria-invalid='true']")
+      ?.focus();
+  }, [focusInvalid]);
 
-  const patients = useQuery({
-    queryKey: qk.patients.list({ search, limit: 8 }),
-    queryFn: () => patientsApi.list({ search, limit: 8 }),
-    enabled: search.length >= 2,
+  const back = backTargetFrom(
+    location,
+    prefillPatientId
+      ? { to: `/pacientes/${prefillPatientId}`, label: "Ficha do paciente" }
+      : undefined,
+  );
+
+  // `?patientId=` vem da ficha do paciente: o formulário já abre com ele.
+  const prefill = useQuery({
+    queryKey: qk.patients.detail(prefillPatientId),
+    queryFn: () => patientsApi.detail(prefillPatientId),
+    enabled: Boolean(prefillPatientId),
   });
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (prefilled.current || !prefill.data) return;
+    prefilled.current = true;
+    setPatient(
+      (current) =>
+        current ?? {
+          id: prefill.data.id,
+          name: prefill.data.name,
+          phone: prefill.data.phone,
+        },
+    );
+  }, [prefill.data]);
 
   const professionals = useQuery({
     queryKey: qk.professionals.list({ limit: 100 }),
     queryFn: () => professionalsApi.list({ limit: 100 }),
   });
+  const active = useMemo(
+    () =>
+      (professionals.data?.data ?? [])
+        .filter((item) => item.isActive)
+        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    [professionals.data],
+  );
+  const professional = active.find((item) => item.id === professionalId);
+  const unknownProfessional =
+    Boolean(professionalId) && professionals.isSuccess && !professional;
 
-  // Checa o encaixe antes de submeter: o aviso aparece enquanto a pessoa ainda
-  // está no formulário, não depois de um erro de servidor.
-  const availability = useQuery({
-    queryKey: qk.appointments.slots(professionalId, `${date}T${time}`),
-    queryFn: () =>
-      appointmentsApi.checkAvailability({ professionalId, date, time }),
-    enabled: Boolean(professionalId && date && time),
-  });
+  // Duração segue o profissional até a pessoa mexer nela.
+  useEffect(() => {
+    if (professional && !durationTouched) {
+      setDuration(String(professional.defaultDurationMinutes));
+    }
+  }, [professional, durationTouched]);
+
+  const durationMinutes = Number(duration);
+  const formErrors = validate();
+  const formValid = Object.keys(formErrors).length === 0;
+
+  const availabilityInput: CheckAvailabilityInput | null =
+    professional &&
+    isDate(date) &&
+    !isPastDate(date) &&
+    isTime(time) &&
+    isDuration(durationMinutes)
+      ? { professionalId: professional.id, date, time, durationMinutes }
+      : null;
+  const availability = useAvailabilityCheck(availabilityInput);
+
+  function validate(): Errors {
+    const next: Errors = {};
+    if (!patient)
+      next.patientId = "Escolha o paciente. Busque pelo nome, CPF ou telefone.";
+    if (!professionalId || unknownProfessional)
+      next.professionalId = "Escolha o profissional.";
+    const dateProblem = dateError(date);
+    if (dateProblem) next.date = dateProblem;
+    if (!time)
+      next.time = "Escolha um horário livre na grade ou digite o horário.";
+    else if (!isTime(time))
+      next.time = "Horário inválido. Use o formato 09:30.";
+    const durationProblem = durationError(durationMinutes);
+    if (durationProblem) next.durationMinutes = durationProblem;
+    if (room.length > 40) next.room = "A sala aceita até 40 letras.";
+    if (notes.length > 1000)
+      next.notes = "As observações aceitam até 1000 letras.";
+    return next;
+  }
 
   const create = useMutation({
     mutationFn: (allowOverbooking: boolean) =>
       appointmentsApi.create({
-        patientId,
+        patientId: patient?.id ?? "",
         professionalId,
         date,
         time,
+        durationMinutes,
         type,
-        notes: notes || undefined,
-        allowOverbooking,
+        room: room.trim() || undefined,
+        notes: notes.trim() || undefined,
+        allowOverbooking: allowOverbooking || undefined,
       }),
     onSuccess: (created) => {
-      void queryClient.invalidateQueries({ queryKey: qk.appointments.all });
-      void queryClient.invalidateQueries({ queryKey: qk.dashboard.all });
+      invalidate();
       toast.push({
         tone: "success",
         title: "Consulta agendada",
-        description: `${created.patientName} — ${created.time}`,
+        description: `${created.patientName} — ${formatDayLong(date)} às ${created.time}`,
       });
-      navigate(`/consultas/${created.id}`);
+      // `replace`: voltar da consulta não reabre o formulário já usado.
+      navigate(`/consultas/${created.id}`, {
+        replace: true,
+        state: { from: back.to },
+      });
+    },
+    onError: (error) => {
+      if (error instanceof ApiError) {
+        if (error.isOverbooking) {
+          setProblem({ kind: "conflict", message: error.message });
+          return;
+        }
+        if (error.code === "PROFESSIONAL_OUTSIDE_SCHEDULE") {
+          setProblem({ kind: "outside", message: error.message });
+          return;
+        }
+        const fields = error.fieldErrors();
+        if (Object.keys(fields).length) setServerFields(fields as Errors);
+      }
+      setProblem({
+        kind: "other",
+        message: errorMessage(
+          error,
+          "Sem conexão com o servidor. Nada foi agendado.",
+        ),
+      });
     },
   });
 
-  const conflict = availability.data && !availability.data.available;
-  const outsideSchedule =
-    availability.data && !availability.data.withinSchedule;
-  const ready = patientId && professionalId && date && time;
+  function submit(allowOverbooking: boolean) {
+    const found = validate();
+    setErrors(found);
+    setServerFields({});
+    setProblem(null);
+    if (Object.keys(found).length) {
+      setFocusInvalid((n) => n + 1);
+      return;
+    }
+    create.mutate(allowOverbooking);
+  }
+
+  function cancel() {
+    // Sem histórico (link aberto direto), `navigate(-1)` sairia do sistema.
+    if (location.key === "default") navigate(back.to);
+    else navigate(-1);
+  }
+
+  // Erro some quando o campo é corrigido — sem esperar o próximo envio.
+  const shown = (field: keyof Errors) =>
+    (errors[field] ? formErrors[field] : undefined) ?? serverFields[field];
+  const clearProblem = () => problem && setProblem(null);
+
+  const overbookButton = formValid ? (
+    <Button
+      variant="secondary"
+      size="sm"
+      loading={create.isPending && create.variables === true}
+      disabled={create.isPending}
+      onClick={() => submit(true)}
+    >
+      Encaixar mesmo assim
+    </Button>
+  ) : (
+    <p className="text-label text-ink-secondary">
+      Complete o formulário para poder encaixar.
+    </p>
+  );
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 md:gap-6">
-      <Link
-        to="/"
-        className="inline-flex w-fit items-center gap-1.5 text-micro font-semibold text-ink-secondary hover:text-accent"
+    <div className="mx-auto w-full max-w-6xl">
+      <PageHeader
+        title="Nova consulta"
+        back={back}
+        description="Os horários ocupados e os conflitos aparecem antes de salvar."
+      />
+
+      <form
+        id="nova-consulta"
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit(false);
+        }}
+        className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
       >
-        <ArrowLeft className="size-4" aria-hidden="true" />
-        Painel do dia
-      </Link>
+        <div className="flex min-w-0 flex-col gap-5">
+          <Panel aria-labelledby="nova-paciente">
+            <PanelHeader id="nova-paciente" title="Paciente" />
+            <PanelBody>
+              {prefill.isPending && prefillPatientId && !patient ? (
+                <div className="skeleton h-14 rounded-control" />
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {prefill.isError && !patient ? (
+                    <InlineError
+                      error={prefill.error}
+                      label="O paciente do link não foi encontrado. Busque abaixo."
+                    />
+                  ) : null}
+                  <PatientPicker
+                    value={patient}
+                    onChange={(next) => {
+                      setPatient(next);
+                      clearProblem();
+                    }}
+                    error={shown("patientId")}
+                    onPicked={() =>
+                      requestAnimationFrame(() =>
+                        professionalRef.current
+                          ?.querySelector("select")
+                          ?.focus(),
+                      )
+                    }
+                  />
+                </div>
+              )}
+            </PanelBody>
+          </Panel>
 
-      <header>
-        <h1 className="text-title-sm font-bold text-ink-primary md:text-title">
-          Nova consulta
-        </h1>
-        <p className="mt-0.5 text-body text-ink-secondary">
-          O conflito de horário aparece antes de você salvar.
-        </p>
-      </header>
+          <Panel aria-labelledby="nova-horario">
+            <PanelHeader id="nova-horario" title="Profissional e horário" />
+            <PanelBody className="flex flex-col gap-4">
+              <div ref={professionalRef} className="flex flex-col gap-2">
+                <SelectField
+                  label="Profissional"
+                  required
+                  value={professional ? professionalId : ""}
+                  disabled={professionals.isPending}
+                  error={shown("professionalId")}
+                  hint={
+                    unknownProfessional
+                      ? "O profissional do link está inativo ou não existe. Escolha outro."
+                      : undefined
+                  }
+                  onChange={(event) => {
+                    setProfessionalId(event.target.value);
+                    setTime("");
+                    clearProblem();
+                  }}
+                >
+                  <option value="">
+                    {professionals.isPending
+                      ? "Carregando profissionais…"
+                      : "Selecione"}
+                  </option>
+                  {active.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} — {item.specialty}
+                    </option>
+                  ))}
+                </SelectField>
+                {professionals.isError ? (
+                  <InlineError
+                    error={professionals.error}
+                    onRetry={() => void professionals.refetch()}
+                    label="A lista de profissionais não carregou."
+                  />
+                ) : null}
+              </div>
 
-      <Panel className="p-4 md:p-6">
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            create.mutate(false);
-          }}
-        >
-          <div>
-            <Field
-              label="Paciente"
-              placeholder="Nome, CPF ou telefone"
-              type="search"
-              autoComplete="off"
-              value={patientTerm}
-              onChange={(event) => {
-                setPatientTerm(event.target.value);
-                setPatientId("");
-              }}
-              hint={
-                patientId
-                  ? "Paciente selecionado."
-                  : "Digite ao menos duas letras para buscar."
-              }
-            />
-            {search.length >= 2 && !patientId ? (
-              <ul className="mt-2 max-h-48 overflow-y-auto rounded-control border border-border-subtle">
-                {patients.data?.data.length === 0 ? (
-                  <li className="flex items-center justify-between gap-3 px-3 py-2.5 text-body text-ink-secondary">
-                    Nenhum paciente com esse dado.
-                    <Link
-                      to="/pacientes/novo"
-                      className="shrink-0 text-micro font-semibold text-accent hover:underline"
-                    >
-                      Cadastrar
-                    </Link>
-                  </li>
-                ) : (
-                  patients.data?.data.map((patient) => (
-                    <li key={patient.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPatientId(patient.id);
-                          setPatientTerm(patient.name);
-                        }}
-                        className="flex min-h-11 w-full items-center justify-between gap-3 px-3 text-left hover:bg-accent-weak"
-                      >
-                        <span className="text-body font-semibold text-ink-primary">
-                          {patient.name}
-                        </span>
-                        <span className="font-mono text-micro text-ink-secondary">
-                          {patient.phone}
-                        </span>
-                      </button>
-                    </li>
-                  ))
-                )}
-              </ul>
-            ) : null}
-          </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_9rem]">
+                <Field
+                  label="Data"
+                  type="date"
+                  required
+                  min={todayISO()}
+                  value={date}
+                  error={
+                    shown("date") ??
+                    (isPastDate(date) ? dateError(date) : undefined)
+                  }
+                  hint={isDate(date) ? formatDayLong(date) : undefined}
+                  onChange={(event) => {
+                    setDate(event.target.value);
+                    setTime("");
+                    clearProblem();
+                  }}
+                />
+                <Field
+                  label="Duração"
+                  type="number"
+                  inputMode="numeric"
+                  required
+                  min={5}
+                  max={480}
+                  step={5}
+                  suffix="min"
+                  value={duration}
+                  error={
+                    shown("durationMinutes") ??
+                    (duration !== "" && !isDuration(durationMinutes)
+                      ? durationError(durationMinutes)
+                      : undefined)
+                  }
+                  onChange={(event) => {
+                    setDuration(event.target.value);
+                    setDurationTouched(true);
+                    clearProblem();
+                  }}
+                />
+              </div>
 
-          <SelectField
-            label="Profissional"
-            required
-            value={professionalId}
-            onChange={(event) => setProfessionalId(event.target.value)}
-          >
-            <option value="">Selecione</option>
-            {professionals.data?.data.map((professional) => (
-              <option key={professional.id} value={professional.id}>
-                {professional.name} — {professional.specialty}
-              </option>
-            ))}
-          </SelectField>
+              <TimePicker
+                professionalId={professional?.id ?? ""}
+                professionalName={professional?.name}
+                date={date}
+                durationMinutes={durationMinutes}
+                value={time}
+                onChange={(next) => {
+                  setTime(next);
+                  clearProblem();
+                }}
+                error={shown("time")}
+              />
+            </PanelBody>
+          </Panel>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              label="Data"
-              type="date"
-              required
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-            />
-            <Field
-              label="Horário"
-              type="time"
-              required
-              value={time}
-              onChange={(event) => setTime(event.target.value)}
-            />
-          </div>
-
-          <SelectField
-            label="Tipo de consulta"
-            value={type}
-            onChange={(event) => setType(event.target.value as AppointmentType)}
-          >
-            {APPOINTMENT_TYPE.map((value) => (
-              <option key={value} value={value}>
-                {APPOINTMENT_TYPE_LABEL[value]}
-              </option>
-            ))}
-          </SelectField>
-
-          <TextareaField
-            label="Observações (opcional)"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-          />
-
-          {conflict || outsideSchedule ? (
-            <div className="rounded-control border border-warning/30 bg-warning-weak p-3">
-              <p className="text-body font-semibold text-warning">
-                {availability.data?.message ??
-                  (conflict
-                    ? "Já existe consulta nesse horário."
-                    : "Horário fora da grade do profissional.")}
-              </p>
-              {availability.data?.conflicts.map((item) => (
-                <p key={item.id} className="mt-1 text-micro text-ink-secondary">
-                  <span className="font-mono">{item.time}</span> —{" "}
-                  {item.patientName}
-                </p>
-              ))}
-            </div>
-          ) : null}
-
-          {create.isError ? (
-            <p className="text-body text-state-atrasada">
-              {create.error instanceof ApiError
-                ? create.error.message
-                : "Não foi possível agendar."}
-            </p>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" loading={create.isPending} disabled={!ready}>
-              Agendar consulta
-            </Button>
-            {conflict ? (
-              <Button
-                type="button"
-                variant="secondary"
-                loading={create.isPending}
-                onClick={() => create.mutate(true)}
+          <Panel aria-labelledby="nova-detalhes">
+            <PanelHeader id="nova-detalhes" title="Detalhes" />
+            <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <SelectField
+                label="Tipo de consulta"
+                value={type}
+                onChange={(event) =>
+                  setType(event.target.value as AppointmentType)
+                }
               >
-                Encaixar mesmo assim
-              </Button>
-            ) : null}
-            <Button type="button" variant="ghost" onClick={() => navigate(-1)}>
-              Cancelar
-            </Button>
+                {APPOINTMENT_TYPE.map((value) => (
+                  <option key={value} value={value}>
+                    {APPOINTMENT_TYPE_LABEL[value]}
+                  </option>
+                ))}
+              </SelectField>
+              <Field
+                label="Sala (opcional)"
+                placeholder="Consultório 2"
+                maxLength={40}
+                value={room}
+                error={shown("room")}
+                onChange={(event) => setRoom(event.target.value)}
+              />
+              <TextareaField
+                label="Observações (opcional)"
+                containerClassName="sm:col-span-2"
+                maxLength={1000}
+                value={notes}
+                error={shown("notes")}
+                hint="Aparece para a recepção e para o consultório."
+                onChange={(event) => setNotes(event.target.value)}
+              />
+            </PanelBody>
+          </Panel>
+        </div>
+
+        <aside
+          aria-label="Resumo do agendamento"
+          className="flex flex-col gap-4 lg:sticky lg:top-6"
+        >
+          <Panel>
+            <PanelBody className="flex flex-col gap-4">
+              <Summary
+                patient={patient?.name}
+                professional={professional?.name}
+                date={isDate(date) ? formatDayLong(date) : undefined}
+                time={isTime(time) ? time : undefined}
+                duration={
+                  isDuration(durationMinutes)
+                    ? `${durationMinutes} min`
+                    : undefined
+                }
+                type={APPOINTMENT_TYPE_LABEL[type]}
+              />
+
+              {problem ? (
+                <Callout
+                  live
+                  tone={problem.kind === "other" ? "danger" : "warning"}
+                  title={
+                    problem.kind === "conflict"
+                      ? "O horário foi ocupado agora há pouco"
+                      : problem.kind === "outside"
+                        ? "Fora da grade de atendimento"
+                        : "A consulta não foi agendada"
+                  }
+                  action={
+                    problem.kind === "conflict" ? overbookButton : undefined
+                  }
+                >
+                  {problem.message}
+                  {problem.kind === "outside"
+                    ? " Escolha um horário da grade."
+                    : null}
+                </Callout>
+              ) : (
+                <AvailabilityNotice
+                  check={availability}
+                  overbookAction={overbookButton}
+                  outsideScheduleBlocks
+                />
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="submit"
+                  size="lg"
+                  block
+                  loading={create.isPending && create.variables === false}
+                  disabled={create.isPending}
+                >
+                  Agendar consulta
+                </Button>
+                <Button type="button" variant="ghost" block onClick={cancel}>
+                  Cancelar
+                </Button>
+              </div>
+            </PanelBody>
+          </Panel>
+        </aside>
+      </form>
+    </div>
+  );
+}
+
+/** O que vai ser gravado, numa leitura. Falta algo? A linha diz o quê. */
+function Summary({
+  patient,
+  professional,
+  date,
+  time,
+  duration,
+  type,
+}: {
+  patient?: string;
+  professional?: string;
+  date?: string;
+  time?: string;
+  duration?: string;
+  type: string;
+}) {
+  const rows = [
+    { label: "Paciente", value: patient, missing: "Escolha o paciente" },
+    {
+      label: "Profissional",
+      value: professional,
+      missing: "Escolha o profissional",
+    },
+    { label: "Data", value: date, missing: "Escolha a data" },
+    { label: "Horário", value: time, missing: "Escolha o horário", mono: true },
+    {
+      label: "Duração",
+      value: duration,
+      missing: "Defina a duração",
+      mono: true,
+    },
+    { label: "Tipo", value: type, missing: "" },
+  ];
+  return (
+    <div>
+      <h2 className="text-card font-semibold text-ink-primary">Resumo</h2>
+      <dl className="mt-3 flex flex-col gap-2.5">
+        {rows.map((row) => (
+          <div
+            key={row.label}
+            className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2"
+          >
+            <dt className="text-label text-ink-secondary">{row.label}</dt>
+            <dd
+              className={
+                row.value
+                  ? `min-w-0 break-words text-body font-semibold text-ink-primary ${row.mono ? "font-mono" : ""}`
+                  : "text-body text-ink-tertiary"
+              }
+            >
+              {row.value ?? row.missing}
+            </dd>
           </div>
-        </form>
-      </Panel>
+        ))}
+      </dl>
     </div>
   );
 }

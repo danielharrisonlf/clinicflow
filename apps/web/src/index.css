@@ -1,217 +1,324 @@
 @import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
-/* ---------------------------------------------------------------------------
-   ClinicFlow — tokens de design.
-   Fonte da verdade: DESIGN.md. Se um valor divergir de lá, DESIGN.md vence.
-   Modo Operate: a pessoa está numa tarefa; a ferramenta some dentro dela.
---------------------------------------------------------------------------- */
+/* Sistema "Cockpit" (DESIGN.md). Todos os tokens vivem aqui: não existe tema
+   em runtime — estilo inline no <html> venceria este arquivo e tornaria o
+   sistema inauditável. Claro no @theme; escuro só redefine tokens, abaixo. */
 
 @theme {
-  /* Superfície — fria e neutra para não competir com as cores de estado */
+  /* Superfícies slate: o app é o fundo, o card é a superfície de trabalho. */
+  --color-surface-app: #f8fafc;
   --color-surface-base: #ffffff;
-  --color-surface-app: #f4f6f7;
-  --color-surface-sunken: #edf1f2;
+  /* Menu, segmento ativo: no claro a elevação vem da shadow-raised. */
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #f1f5f9;
+  /* Vidro só em camada sobreposta (folha, diálogo, paleta, header móvel),
+     sempre com backdrop-blur-md. Nunca em card em repouso. */
+  --color-surface-glass: rgb(255 255 255 / 0.72);
+  /* Hover translúcido: funciona igual sobre base, raised e sunken. */
+  --color-surface-hover: rgb(15 23 42 / 0.05);
+  --color-surface-marketing: #eaf4fb;
+  --color-surface-marketing-soft: #f3f8fc;
+  --color-ink-marketing: #172c3e;
+  /* Landing pública: cores fixas sobre azul-gelo em ambos os temas. */
+  --color-marketing-white: #ffffff;
+  --color-marketing-ink-muted: #435b70;
+  --color-marketing-ink-soft: #526a7e;
+  --color-marketing-ink-warm: #435b70;
+  --color-marketing-brand-dot: #0f6cbd;
+  --color-marketing-action: #0f6cbd;
+  --color-marketing-action-hover: #115ea3;
+  --color-marketing-onaction: #ffffff;
+  --color-marketing-cta-hover: #115ea3;
+  --color-marketing-border: #d4e2ed;
+  --color-marketing-border-warm: #dce8f1;
+  --color-marketing-border-peach: rgb(18 78 122 / 0.15);
+  --color-marketing-surface-warm: #f6fafd;
+  --color-marketing-surface-card: #ffffff;
+  --color-marketing-surface-preview: #f5f9fc;
+  --color-marketing-surface-inset: #edf4f9;
+  --color-marketing-surface-icon: #e3f0f9;
+  --color-marketing-surface-peach: #e5f2fa;
+  --color-marketing-surface-glaze: rgb(221 238 249 / 0.45);
+  --color-marketing-surface-hover: rgb(255 255 255 / 0.7);
+  --color-marketing-action-soft: #ebf3fc;
+  --color-marketing-action-soft-hover: #dceafa;
+  --color-marketing-shadow-nav: rgb(25 64 94 / 0.05);
+  --color-marketing-shadow-strong: rgb(25 64 94 / 0.16);
+  --color-marketing-shadow-card: rgb(25 64 94 / 0.08);
+  --color-marketing-shadow-peach: rgb(25 64 94 / 0.08);
+  /* Fundo atrás de diálogo e folha; o vidro da camada desfoca por cima dele. */
+  --color-scrim: rgb(2 6 23 / 0.24);
 
-  --color-border-subtle: #e4e8ea;
-  --color-border-default: #cfd6da;
+  /* Micro-borda de card; divisória forte; contorno de campo. */
+  --color-border-subtle: rgb(226 232 240 / 0.8);
+  --color-border-default: #cbd5e1;
+  --color-border-strong: #8392a7;
 
-  --color-ink-primary: #0e1114;
-  --color-ink-secondary: #4a545e;
-  --color-ink-tertiary: #79848f;
+  --color-ink-primary: #0f172a;
+  --color-ink-secondary: #334155;
+  --color-ink-tertiary: #5b6b82;
   --color-ink-onaccent: #ffffff;
 
-  /* Acento: ação primária, seleção atual e estado. Nunca decoração. */
-  --color-accent: #0b5c63;
-  --color-accent-hover: #094a50;
-  --color-accent-active: #073b40;
-  --color-accent-weak: #e4efef;
+  /* Azul é ação: primário, seleção e foco. Nunca enfeite. */
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-active: #1e40af;
+  --color-accent-weak: #eff6ff;
+  --color-accent-ink: #1d4ed8;
 
-  /* Estados — espelham AppointmentStatus um para um.
-     ATRASADA é derivada no backend, não existe no enum do Prisma. */
-  --color-state-agendada: #79848f;
-  --color-state-agendada-weak: #f4f6f7;
-  --color-state-confirmada: #1c5fa8;
-  --color-state-confirmada-weak: #eaf1f9;
-  --color-state-espera: #7a4a00;
-  --color-state-espera-weak: #f2c64b;
-  --color-state-atendimento: #0b5c63;
-  --color-state-atendimento-weak: #e4efef;
-  --color-state-concluida: #17683c;
-  --color-state-concluida-weak: #e8f2ec;
-  --color-state-cancelada: #79848f;
-  --color-state-cancelada-weak: #f4f6f7;
-  --color-state-atrasada: #b3261e;
-  --color-state-atrasada-weak: #fbebe9;
+  /* Esmeralda: receita, sucesso, confirmado. `success` é o mesmo papel. */
+  --color-revenue: #047857;
+  --color-revenue-weak: #ecfdf5;
+  --color-success: var(--color-revenue);
+  --color-success-weak: var(--color-revenue-weak);
 
-  /* Âmbar como tinta sobre claro nunca é #F2C64B — vira #7A4A00, que passa em AA */
-  --color-warning: #7a4a00;
-  --color-warning-weak: #faf0d6;
+  /* Rosa: risco, atraso, destrutivo. `danger-fill` carrega texto branco. */
+  --color-danger: #be123c;
+  --color-danger-hover: #9f1239;
+  --color-danger-weak: #fff1f2;
+  --color-danger-fill: #be123c;
+  --color-danger-fill-hover: #9f1239;
 
-  /* Uma superfamília, dois papéis.
-     Next: títulos, rótulos, corpo, nomes próprios que não podem ser lidos errado.
-     Mono: hora, duração, telefone, CPF, código — medição, não fantasia. */
+  /* Âmbar: atenção e espera. Nunca tinta de texto pequeno sobre claro além
+     do tom 800 abaixo. */
+  --color-warning: #92400e;
+  --color-warning-weak: #fffbeb;
+  --color-warning-strong: #fef3c7;
+
+  /* Aviso neutro: família do acento. */
+  --color-info: var(--color-accent-ink);
+  --color-info-weak: var(--color-accent-weak);
+
+  /* Estados clínicos da consulta: um matiz por estado, mais um ícone no selo,
+     para que cor nunca seja o único sinal. */
+  --color-state-agendada: #475569;
+  --color-state-agendada-weak: #f1f5f9;
+  --color-state-confirmada: #1d4ed8;
+  --color-state-confirmada-weak: #dbeafe;
+  --color-state-espera: #92400e;
+  --color-state-espera-weak: #fef3c7;
+  --color-state-atendimento: #6d28d9;
+  --color-state-atendimento-weak: #ede9fe;
+  --color-state-concluida: #047857;
+  --color-state-concluida-weak: #d1fae5;
+  --color-state-cancelada: #5b6b82;
+  --color-state-cancelada-weak: #f1f5f9;
+  --color-state-atrasada: #be123c;
+  --color-state-atrasada-weak: #ffe4e6;
+
+  /* Geist na interface; Geist Mono em hora, telefone, CPF e contagens.
+     Auto-hospedadas (fontsource), sem chamada a serviço externo. */
   --font-sans:
-    "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", Roboto, sans-serif;
+    "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
   --font-mono:
-    "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, Consolas,
-    monospace;
+    "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Escala fixa, razão ~1.2. Sem clamp: o operador vê em DPI constante. */
-  --text-hero: 44px;
-  --text-hero--line-height: 1.15;
-  --text-title: 30px;
+  /* Escala fixa, razão ~1.2. Corpo a 15px: 8h de leitura a 70cm. */
+  --text-hero: 40px;
+  --text-hero--line-height: 1.1;
+  --text-title: 28px;
   --text-title--line-height: 1.15;
-  --text-metric: 28px;
-  --text-metric--line-height: 1.15;
+  --text-title-sm: 22px;
+  --text-title-sm--line-height: 1.2;
+  --text-metric: 26px;
+  --text-metric--line-height: 1.1;
+  --text-metric-sm: 20px;
+  --text-metric-sm--line-height: 1.15;
   --text-entity: 24px;
-  --text-entity--line-height: 1.15;
-  --text-section: 20px;
-  --text-section--line-height: 1.25;
+  --text-entity--line-height: 1.2;
+  --text-section: 18px;
+  --text-section--line-height: 1.3;
   --text-card: 16px;
   --text-card--line-height: 1.35;
-  --text-body: 14px;
-  --text-body--line-height: 1.45;
+  --text-body: 15px;
+  --text-body--line-height: 1.5;
   --text-label: 13px;
   --text-label--line-height: 1.45;
   --text-micro: 12px;
-  --text-micro--line-height: 1.45;
+  --text-micro--line-height: 1.4;
+  /* Campo em ponteiro grosso: abaixo de 16px o iOS dá zoom no foco. */
+  --text-input-touch: 16px;
+  --text-input-touch--line-height: 1.4;
 
-  /* Degraus de topo rebaixados no responsivo: 30px num board de 390 come
-     metade da largura útil. Piso de 12px, sem exceção. */
-  --text-title-sm: 24px;
-  --text-title-sm--line-height: 1.15;
-  --text-metric-sm: 20px;
-  --text-metric-sm--line-height: 1.25;
+  /* Selo e kbd · botão, campo, segmento · menu, aviso · painel, stat card ·
+     diálogo, folha. Selo de estado é pílula (rounded-full). */
+  --radius-marker: 6px;
+  --radius-control: 8px;
+  --radius-raised: 10px;
+  --radius-card: 12px;
+  --radius-modal: 16px;
 
-  --radius-marker: 4px;
-  --radius-control: 6px;
-  --radius-raised: 8px;
-  --radius-card: 10px;
-  --radius-modal: 12px;
-
-  /* Elevação real: deslocamento + blur. Nunca halo colorido. */
+  /* Elevação no claro: difusa, duas camadas, sempre com deslocamento. */
   --shadow-panel:
-    0 1px 2px rgb(14 17 20 / 0.04), 0 8px 24px rgb(14 17 20 / 0.08);
+    0 1px 2px rgb(2 6 23 / 0.04), 0 8px 24px -12px rgb(2 6 23 / 0.12);
   --shadow-raised:
-    0 1px 2px rgb(14 17 20 / 0.05), 0 2px 8px rgb(14 17 20 / 0.06);
+    0 2px 4px rgb(2 6 23 / 0.06), 0 16px 32px -16px rgb(2 6 23 / 0.18);
+  --shadow-overlay:
+    0 8px 16px rgb(2 6 23 / 0.1), 0 32px 64px -24px rgb(2 6 23 / 0.28);
+
+  /* Larguras estruturais da casca */
+  --spacing-rail: 84px;
+  --spacing-sidebar: 232px;
+  --spacing-panel: 520px;
+  --spacing-bottom-nav: 64px;
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+
+  --animate-sheet-up: sheet-up 220ms var(--ease-out-quart);
+  --animate-sheet-left: sheet-left 220ms var(--ease-out-quart);
+  --animate-pop: pop 160ms var(--ease-out-quart);
+  --animate-fade: fade 160ms ease-out;
+  --animate-toast: toast-in 200ms var(--ease-out-quart);
+  /* Dot do que está vivo agora (CHECK_IN, EM_ATENDIMENTO, ATRASADA, crítico).
+     Com prefers-reduced-motion vira dot estático (regra em `base`). */
+  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+@keyframes sheet-left {
+  from {
+    transform: translateX(32px);
+    opacity: 0;
+  }
+}
+@keyframes pop {
+  from {
+    transform: scale(0.98) translateY(-4px);
+    opacity: 0;
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes toast-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
 }
 
 /* ---------------------------------------------------------------------------
-   Tema escuro.
-
-   Só os tokens mudam. Nenhum componente tem variante `dark:` porque nenhum
-   componente conhece cor literal: quem sabe a cor é o token, e ele é redefinido
-   aqui. Tela nova não custa trabalho de tema.
-
-   Três estados: escolha explícita em `data-theme`, e o padrão do sistema quando
-   não há escolha. O `:not([data-theme="light"])` impede que a preferência do SO
-   sobreponha quem pediu claro na mão.
-
-   Fica no layer `theme` porque é onde o `@theme` do Tailwind emite os tokens.
-   Em `base` a ordem de camadas inverteria e o claro venceria sempre.
-
-   O que NÃO muda: o selo de espera. Âmbar sólido com tinta escura é legível nos
-   dois temas, e ele é o único estado preenchido do sistema.
+   Tema escuro. Três estados: data-theme="light", "dark" ou ausente (segue o
+   sistema). Os overrides vivem no layer `theme`, onde o @theme emite os tokens;
+   em `base` a ordem de camadas inverteria e o claro venceria sempre.
+   O bloco é declarado uma vez e reaproveitado pelos dois seletores.
 --------------------------------------------------------------------------- */
 @layer theme {
   :root {
     color-scheme: light;
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      color-scheme: dark;
-
-      --color-surface-base: #151b1f;
-      --color-surface-app: #0e1316;
-      --color-surface-sunken: #1d252a;
-
-      --color-border-subtle: #283238;
-      --color-border-default: #3a464e;
-
-      --color-ink-primary: #e8edef;
-      --color-ink-secondary: #a6b2b9;
-      --color-ink-tertiary: #78858d;
-      /* O acento clareia no escuro, então a tinta sobre ele escurece. */
-      --color-ink-onaccent: #062326;
-
-      --color-accent: #58b6be;
-      --color-accent-hover: #6fc5cc;
-      --color-accent-active: #83d0d6;
-      --color-accent-weak: #123338;
-
-      --color-state-agendada: #8a959c;
-      --color-state-agendada-weak: #1d252a;
-      --color-state-confirmada: #79b4ee;
-      --color-state-confirmada-weak: #14293d;
-      --color-state-atendimento: #58b6be;
-      --color-state-atendimento-weak: #123338;
-      --color-state-concluida: #6ccb95;
-      --color-state-concluida-weak: #122e1f;
-      --color-state-cancelada: #78858d;
-      --color-state-cancelada-weak: #1d252a;
-      --color-state-atrasada: #f1897f;
-      --color-state-atrasada-weak: #3a1c1b;
-
-      --color-warning: #e8b45e;
-      --color-warning-weak: #2e2413;
-
-      --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.45);
-      --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.35), 0 2px 8px rgb(0 0 0 / 0.3);
-    }
-  }
-
   :root[data-theme="dark"] {
     color-scheme: dark;
+    /* Elevação por luminosidade: quanto mais perto, mais claro. Nada de
+       preto puro (#000) nem branco puro no texto. */
+    --color-surface-app: #020617;
+    --color-surface-base: #0f172a;
+    --color-surface-raised: #1e293b;
+    --color-surface-sunken: #0b1120;
+    --color-surface-glass: rgb(15 23 42 / 0.75);
+    --color-surface-hover: rgb(255 255 255 / 0.06);
+    --color-scrim: rgb(0 0 0 / 0.6);
 
-    --color-surface-base: #151b1f;
-    --color-surface-app: #0e1316;
-    --color-surface-sunken: #1d252a;
+    --color-border-subtle: rgb(255 255 255 / 0.08);
+    --color-border-default: rgb(255 255 255 / 0.14);
+    --color-border-strong: #64748b;
 
-    --color-border-subtle: #283238;
-    --color-border-default: #3a464e;
+    --color-ink-primary: #e2e8f0;
+    --color-ink-secondary: #94a3b8;
+    --color-ink-tertiary: #8796ab;
+    --color-ink-onaccent: #ffffff;
 
-    --color-ink-primary: #e8edef;
-    --color-ink-secondary: #a6b2b9;
-    --color-ink-tertiary: #78858d;
-    /* O acento clareia no escuro, então a tinta sobre ele escurece. */
-    --color-ink-onaccent: #062326;
+    --color-accent: #2563eb;
+    --color-accent-hover: #1d4ed8;
+    --color-accent-active: #1e40af;
+    --color-accent-weak: #172554;
+    --color-accent-ink: #60a5fa;
 
-    --color-accent: #58b6be;
-    --color-accent-hover: #6fc5cc;
-    --color-accent-active: #83d0d6;
-    --color-accent-weak: #123338;
+    --color-revenue: #34d399;
+    --color-revenue-weak: #064e3b;
 
-    --color-state-agendada: #8a959c;
-    --color-state-agendada-weak: #1d252a;
-    --color-state-confirmada: #79b4ee;
-    --color-state-confirmada-weak: #14293d;
-    --color-state-atendimento: #58b6be;
-    --color-state-atendimento-weak: #123338;
-    --color-state-concluida: #6ccb95;
-    --color-state-concluida-weak: #122e1f;
-    --color-state-cancelada: #78858d;
-    --color-state-cancelada-weak: #1d252a;
-    --color-state-atrasada: #f1897f;
-    --color-state-atrasada-weak: #3a1c1b;
+    --color-danger: #fb7185;
+    --color-danger-hover: #fda4af;
+    --color-danger-weak: #4c0519;
+    /* O preenchimento destrutivo carrega texto branco nos dois temas. */
+    --color-danger-fill: #be123c;
+    --color-danger-fill-hover: #e11d48;
+    --color-warning: #fcd34d;
+    --color-warning-weak: #451a03;
+    --color-warning-strong: #78350f;
 
-    --color-warning: #e8b45e;
-    --color-warning-weak: #2e2413;
+    --color-state-agendada: #94a3b8;
+    --color-state-agendada-weak: #1e293b;
+    --color-state-confirmada: #93c5fd;
+    --color-state-confirmada-weak: #172554;
+    --color-state-espera: #fcd34d;
+    --color-state-espera-weak: #451a03;
+    --color-state-atendimento: #c4b5fd;
+    --color-state-atendimento-weak: #2e1065;
+    --color-state-concluida: #6ee7b7;
+    --color-state-concluida-weak: #064e3b;
+    --color-state-cancelada: #94a3b8;
+    --color-state-cancelada-weak: #1e293b;
+    --color-state-atrasada: #fda4af;
+    --color-state-atrasada-weak: #4c0519;
 
-    --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.45);
-    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.35), 0 2px 8px rgb(0 0 0 / 0.3);
+    /* No escuro sombra não aparece: card em repouso fica só com a micro-borda;
+       sombra existe apenas sob o que flutua (menu, toast, diálogo). */
+    --shadow-panel: 0 0 #0000;
+    --shadow-raised:
+      0 2px 4px rgb(0 0 0 / 0.3), 0 16px 32px -16px rgb(0 0 0 / 0.6);
+    --shadow-overlay:
+      0 8px 16px rgb(0 0 0 / 0.35), 0 32px 64px -24px rgb(0 0 0 / 0.7);
+  }
+
+  /* Trocar de tema é troca de token, não animação: sem isto, todo controle
+     com transição de cor pisca durante a troca. */
+  :root[data-theme-switching] *,
+  :root[data-theme-switching] *::before,
+  :root[data-theme-switching] *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: precisa vencer as utilitárias */
+    transition: none !important;
   }
 }
+
+/* Tailwind não permite reaproveitar o bloco acima dentro de @media sem
+   duplicar; usamos a variante `dark` customizada abaixo apenas para o atributo,
+   e o script de index.html resolve "sistema" para data-theme antes da pintura. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @layer base {
   :root {
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
+    accent-color: var(--color-accent);
+    caret-color: var(--color-accent);
   }
 
   html {
-    scroll-behavior: smooth;
+    scrollbar-color: var(--color-border-default) transparent;
   }
 
   body {
@@ -219,20 +326,20 @@
     color: var(--color-ink-primary);
     font-family: var(--font-sans);
     font-size: var(--text-body);
-    line-height: 1.45;
+    line-height: var(--text-body--line-height);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
 
-  /* Superfícies do navegador que não desenhamos ainda carregam o design. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
   ::selection {
     background-color: var(--color-accent-weak);
     color: var(--color-ink-primary);
-  }
-
-  :root {
-    accent-color: var(--color-accent);
-    caret-color: var(--color-accent);
   }
 
   /* Foco por box-shadow, não outline: respeita o border-radius. */
@@ -240,12 +347,26 @@
     outline: none;
     box-shadow:
       0 0 0 2px var(--color-surface-base),
-      0 0 0 4px var(--color-accent);
+      0 0 0 4px var(--color-accent-ink);
+  }
+
+  a {
+    text-underline-offset: 3px;
+  }
+
+  /* O Tab chega ao botão nativo de calendário/relógio dentro do campo, que
+     não desenha anel próprio: o campo inteiro carrega o foco. */
+  input[type="date"]:focus-within,
+  input[type="time"]:focus-within {
+    box-shadow:
+      0 0 0 2px var(--color-surface-base),
+      0 0 0 4px var(--color-accent-ink);
   }
 
   /* Hora, telefone, CPF e contadores não podem saltar quando o dígito muda. */
   .font-mono,
-  table {
+  table,
+  .tabular {
     font-variant-numeric: tabular-nums;
   }
 
@@ -254,9 +375,12 @@
     input,
     select,
     textarea {
-      font-size: 16px;
+      font-size: var(--text-input-touch);
     }
   }
+
+  /* color-scheme acompanha data-theme e colore calendário/relógio nativos.
+     Inverter o ícone novamente apagaria seu contraste no tema escuro. */
 
   /**
    * `!important` é obrigatório aqui: a regra precisa vencer as utilitárias do
@@ -273,6 +397,12 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
       /* biome-ignore-end lint/complexity/noImportantStyles: precisa vencer as utilitárias */
+    }
+
+    /* O pulso dos dots vira dot estático, opaco e no tamanho cheio. */
+    .animate-pulse-dot {
+      /* biome-ignore lint/complexity/noImportantStyles: precisa vencer a utilitária */
+      animation: none !important;
     }
   }
 }

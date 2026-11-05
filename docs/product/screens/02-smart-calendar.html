@@ -1,0 +1,1193 @@
+<title>ClinicFlow Agenda</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky glass header → vitals strip → day heat strip → 5-stage live board + Copilot rail.
+   Tokens are RGB triplets so Tailwind can apply alpha (bg-ok/10, border-fg/[0.08]). */
+:root {
+  --bg: 251 251 253;      /* off-white editorial */
+  --surface: 255 255 255;
+  --sunken: 244 244 247;
+  --fg: 17 17 22;
+  --muted: 92 92 106;
+  --faint: 140 140 155;
+  --ok: 5 150 105;        /* esmeralda: fluxo positivo, receita */
+  --ai: 79 70 229;        /* índigo: Copilot, inteligência */
+  --warn: 180 83 9;       /* âmbar: atenção, atraso */
+  --bad: 225 29 72;       /* carmim: desistência, estouro */
+  --font-ui: "Geist", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-data: "Geist Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: 9 9 11; --surface: 18 18 21; --sunken: 14 14 17; --fg: 244 244 246;
+    --muted: 161 161 170; --faint: 113 113 122;
+    --ok: 16 185 129; --ai: 129 140 248; --warn: 251 191 36; --bad: 251 113 133;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: 9 9 11; --surface: 18 18 21; --sunken: 14 14 17; --fg: 244 244 246;
+  --muted: 161 161 170; --faint: 113 113 122;
+  --ok: 16 185 129; --ai: 129 140 248; --warn: 251 191 36; --bad: 251 113 133;
+  color-scheme: dark;
+}
+html, body { background: rgb(var(--bg)); color: rgb(var(--fg)); }
+body { font-family: var(--font-ui); font-size: 14px; -webkit-font-smoothing: antialiased; }
+.tnum { font-variant-numeric: tabular-nums; }
+@keyframes enter { from { opacity: 0; transform: translateY(4px) scale(.99); } to { opacity: 1; transform: none; } }
+@keyframes flash { 0% { background: rgb(var(--ok) / .16); } 100% { background: transparent; } }
+@keyframes pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.anim-enter { animation: enter .28s cubic-bezier(.2,.8,.2,1) both; }
+.anim-flash { animation: flash 1.6s ease-out both; }
+.anim-pop { animation: pop .22s cubic-bezier(.2,.8,.2,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .anim-enter, .anim-flash, .anim-pop, .animate-ping, .animate-pulse { animation: none !important; }
+  * { transition: none !important; }
+}
+#boot { padding: 48px 16px; color: rgb(var(--muted)); font: 14px/1.5 var(--font-ui); }
+</style>
+
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg: "rgb(var(--bg) / <alpha-value>)",
+          surface: "rgb(var(--surface) / <alpha-value>)",
+          sunken: "rgb(var(--sunken) / <alpha-value>)",
+          fg: "rgb(var(--fg) / <alpha-value>)",
+          muted: "rgb(var(--muted) / <alpha-value>)",
+          faint: "rgb(var(--faint) / <alpha-value>)",
+          ok: "rgb(var(--ok) / <alpha-value>)",
+          ai: "rgb(var(--ai) / <alpha-value>)",
+          warn: "rgb(var(--warn) / <alpha-value>)",
+          bad: "rgb(var(--bad) / <alpha-value>)",
+        },
+        fontFamily: {
+          sans: ["Geist", "ui-sans-serif", "system-ui", "Segoe UI", "sans-serif"],
+          mono: ['"Geist Mono"', "ui-monospace", "SFMono-Regular", "Consolas", "monospace"],
+        },
+      },
+    },
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script>window.react = window.React;</script>
+<script src="https://unpkg.com/lucide-react@0.454.0/dist/umd/lucide-react.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+
+<div id="root"><div id="boot">Carregando a agenda da clínica…</div></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+/* ───────────────────────── helpers (iguais à tela 1) ───────────────────────── */
+const Icon = ({ n, size = 16, className = "", sw = 1.75 }) => {
+  const C = window.LucideReact && window.LucideReact[n];
+  return C
+    ? <C size={size} strokeWidth={sw} className={className} aria-hidden="true" />
+    : <span aria-hidden="true" className={"inline-block shrink-0 " + className} style={{ width: size, height: size }} />;
+};
+const pad = (n) => String(n).padStart(2, "0");
+const T = (h, m, s = 0) => h * 3600 + m * 60 + s;
+const hm = (s) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}`;
+const hms = (s) => `${hm(s)}:${pad(Math.floor(s % 60))}`;
+const mmss = (s) => { s = Math.max(0, Math.floor(s)); return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; };
+const brl = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
+const first = (name) => name.split(" ")[0];
+const initials = (name) => name.split(" ").filter((w) => w.length > 2).slice(0, 2).map((w) => w[0]).join("");
+const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const cx = (...a) => a.filter(Boolean).join(" ");
+
+/* datas */
+const BASE_DATE = new Date(2026, 9, 9); // sexta-feira, 9 de outubro de 2026
+const START = T(10, 42, 0);
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const dkey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const fromKey = (k) => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
+const TODAY = dkey(BASE_DATE);
+const mondayOf = (d) => addDays(d, -((d.getDay() + 6) % 7));
+const WD = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const longDate = (d) => d.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+const shortDate = (d) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+
+/* ───────────────────────── mock: Clínica Vértice ───────────────────────── */
+const CLINIC = "Clínica Vértice";
+const DOCS = {
+  helena: { name: "Dra. Helena Prado", short: "Dra. Helena", spec: "Dermatologia", room: "Sala 1", color: "#8B5CF6", slot: 20 },
+  ramos: { name: "Dr. Rafael Ramos", short: "Dr. Ramos", spec: "Ortopedia", room: "Sala 2", color: "#0EA5E9", slot: 30 },
+  okada: { name: "Dra. Beatriz Okada", short: "Dra. Okada", spec: "Cardiologia", room: "Sala 3", color: "#EC4899", slot: 30 },
+  menezes: { name: "Dr. Thiago Menezes", short: "Dr. Menezes", spec: "Endocrinologia", room: "Sala 4", color: "#14B8A6", slot: 30 },
+};
+const DOC_IDS = Object.keys(DOCS);
+const GRID_START = T(7, 0), GRID_END = T(19, 0), HOUR_PX = 80;
+const WEEKDAYS = [1, 2, 3, 4, 5, 6]; // seg–sáb
+
+// Janelas de atendimento por dia da semana (0 = domingo). Almoço entre 12:00 e 13:00.
+const WIN = {
+  helena: { 1: [[8, 0, 12, 0], [13, 0, 18, 0]], 2: [[8, 0, 12, 0], [13, 0, 18, 0]], 3: [[8, 0, 12, 0], [13, 0, 18, 0]], 4: [[8, 0, 12, 0], [13, 0, 18, 0]], 5: [[8, 0, 12, 0], [13, 0, 18, 0]], 6: [[8, 0, 12, 0]] },
+  ramos: { 1: [[7, 30, 12, 0], [13, 0, 17, 0]], 2: [[7, 30, 12, 0], [13, 0, 17, 0]], 3: [[7, 30, 12, 0], [13, 0, 17, 0]], 4: [[7, 30, 12, 0], [13, 0, 17, 0]], 5: [[7, 30, 12, 0], [13, 0, 17, 0]], 6: [[8, 0, 12, 0]] },
+  okada: { 1: [[9, 0, 12, 30], [13, 30, 19, 0]], 2: [[9, 0, 12, 30], [13, 30, 19, 0]], 3: [[9, 0, 12, 30], [13, 30, 19, 0]], 4: [[9, 0, 12, 30], [13, 30, 19, 0]], 5: [[9, 0, 12, 30], [13, 30, 19, 0]] },
+  menezes: { 1: [[7, 0, 12, 0], [13, 0, 16, 0]], 2: [[7, 0, 12, 0], [13, 0, 16, 0]], 3: [[7, 0, 12, 0], [13, 0, 16, 0]], 4: [[7, 0, 12, 0], [13, 0, 16, 0]], 5: [[7, 0, 12, 0], [13, 0, 16, 0]] },
+};
+const windowsFor = (doc, date) => (WIN[doc][date.getDay()] || []).map(([h1, m1, h2, m2]) => [T(h1, m1), T(h2, m2)]);
+
+const conv = (label) => ({ kind: "conv", label });
+const part = (value) => ({ kind: "part", label: "Particular", value });
+const PAYERS = [conv("Unimed"), conv("Bradesco Saúde"), conv("SulAmérica"), conv("Amil"), conv("Porto Saúde"), part(380), part(450), part(520)];
+const NAMES = ["Beatriz Lemos", "Rogério Tavares", "Alice Monteiro", "Bruno Carvalho", "Daniela Freitas", "Eduardo Brandão", "Felipe Arruda", "Gabriela Nunes", "Heitor Lins", "Ingrid Sales", "Jorge Ferraz", "Karina Botelho", "Leandro Vilela", "Luana Peixoto", "Murilo Antunes", "Natália Quadros", "Otávio Reis", "Paula Siqueira", "Rafaela Dantas", "Samuel Barros", "Tatiane Lobo", "Vicente Amaral", "Yasmin Correia", "Lívia Martins", "Augusto Serra", "Cecília Prado", "Davi Guimarães", "Elisa Varela", "Francisco Melo", "Helena Castro", "Igor Bittencourt", "Joana Ribas", "Kauã Marques", "Letícia Moreno", "Mateus Fonseca", "Nina Albuquerque", "Paulo Vasques", "Rita Cavalcanti", "Sérgio Lopes", "Vera Nascimento"];
+const TYPES = { helena: ["Consulta", "Retorno", "Mapeamento de nevos", "Biópsia de pele", "Primeira consulta"], ramos: ["Consulta", "Retorno", "Avaliação", "Infiltração", "Primeira consulta"], okada: ["Consulta", "Retorno · ECG", "Primeira consulta", "Retorno", "Consulta · palpitações"], menezes: ["Consulta", "Retorno · HbA1c", "Retorno", "Primeira consulta", "Consulta · tireoide"] };
+
+// PRNG determinístico por semente (mesma agenda a cada carregamento).
+function rng(seed) { let s = 0; for (const ch of seed) s = (s * 31 + ch.charCodeAt(0)) >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+const hash = (s) => { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+
+// Hoje: os mesmos pacientes do Cockpit (tela 1), vistos pela agenda às 10:42.
+const TODAY_FIXED = [
+  { doc: "helena", t: T(8, 0), name: "Beatriz Lemos", type: "Consulta", payer: conv("Unimed"), status: "concluida" },
+  { doc: "helena", t: T(8, 20), name: "Rogério Tavares", type: "Retorno", payer: part(380), status: "concluida" },
+  { doc: "helena", t: T(9, 0), name: "Patrícia Gomes", type: "Consulta", payer: conv("Unimed"), status: "concluida" },
+  { doc: "helena", t: T(10, 30), name: "Camila Duarte", type: "Biópsia de pele", payer: part(680), status: "consulta" },
+  { doc: "helena", t: T(10, 50), name: "Sônia Valente", type: "Consulta", payer: conv("Unimed"), status: "checkin" },
+  { doc: "helena", t: T(11, 10), name: "Lúcia Andrade", type: "Consulta", payer: conv("Unimed"), status: "checkin" },
+  { doc: "helena", t: T(11, 30), name: "Ana Ribeiro", type: "Consulta", payer: conv("Unimed"), status: "confirmada", confirmedAt: T(8, 14) },
+  { doc: "ramos", t: T(9, 30), name: "João Vitor Campos", type: "Retorno", payer: part(400), status: "concluida" },
+  { doc: "ramos", t: T(10, 0), name: "Isabela Rocha", type: "Avaliação · joelho", payer: conv("Porto Saúde"), status: "consulta" },
+  { doc: "ramos", t: T(10, 30), name: "Fernanda Moura", type: "Retorno", payer: conv("Bradesco Saúde"), status: "checkin" },
+  { doc: "ramos", t: T(11, 15), name: "Carlos Eduardo Lima", type: "Retorno", payer: conv("Bradesco Saúde"), status: "confirmada", confirmedAt: T(7, 58), eta: "a caminho · ~10 min" },
+  { doc: "ramos", t: T(14, 0), name: "Gilberto Nunes", type: "Avaliação", payer: part(400), status: "cancelada", cancelledAt: T(9, 46) },
+  { doc: "ramos", t: T(14, 0), name: "Mariana Costa", type: "Avaliação", payer: part(400), status: "smartfill", confirmedAt: T(9, 52), smartFillAt: T(9, 52), openedAt: T(9, 46), replaces: "Gilberto Nunes", callout: true },
+  { doc: "okada", t: T(9, 40), name: "Renata Saldanha", type: "Consulta", payer: conv("SulAmérica"), status: "concluida" },
+  { doc: "okada", t: T(10, 20), name: "Marcos Aurélio Pinto", type: "Retorno · ECG", payer: conv("Unimed"), status: "consulta" },
+  { doc: "okada", t: T(11, 0), name: "Roberto Nogueira", type: "Retorno", payer: conv("Amil"), status: "checkin" },
+  { doc: "okada", t: T(11, 30), name: "Juliana Furtado", type: "Primeira consulta", payer: part(450), status: "confirmada", confirmedAt: T(9, 12) },
+  { doc: "okada", t: T(15, 30), name: "Cláudia Reis", type: "Retorno", payer: conv("Unimed"), status: "cancelada", cancelledAt: T(10, 39) },
+  { doc: "okada", t: T(15, 30), name: "Eduardo Brandão", type: "Consulta · palpitações", payer: conv("Unimed"), status: "smartfill", confirmedAt: T(10, 42), smartFillAt: T(10, 42), openedAt: T(10, 39), replaces: "Cláudia Reis" },
+  { doc: "menezes", t: T(10, 0), name: "Henrique Bastos", type: "Retorno", payer: conv("Unimed"), status: "concluida" },
+  { doc: "menezes", t: T(10, 45), name: "Gustavo Teixeira", type: "Primeira consulta", payer: part(520), status: "checkin" },
+  { doc: "menezes", t: T(11, 15), name: "Pedro Henrique Sá", type: "Consulta", payer: conv("SulAmérica"), status: "confirmada", confirmedAt: T(8, 40) },
+  { doc: "helena", t: T(14, 40), name: "Tatiane Lobo", type: "Mapeamento de nevos", payer: conv("Amil"), status: "agendada" },
+  { doc: "menezes", t: T(14, 30), name: "Vicente Amaral", type: "Retorno · HbA1c", payer: conv("Unimed"), status: "agendada" },
+];
+// Debaixo do callout do Smart Waitlist (Dr. Ramos 14:30–15:30) a grade fica livre de propósito.
+const FORCE_FREE = new Set(["ramos:" + T(14, 30), "ramos:" + T(15, 0)]);
+
+const dayCache = {};
+function genDay(key) {
+  if (dayCache[key]) return dayCache[key];
+  const date = fromKey(key);
+  const isToday = key === TODAY;
+  const past = key < TODAY;
+  const out = [];
+  let n = 0;
+  if (isToday) TODAY_FIXED.forEach((a) => out.push({ ...a, id: `${key}-${a.doc}-${hm(a.t)}-${n++}`, date: key, dur: DOCS[a.doc].slot }));
+  DOC_IDS.forEach((doc) => {
+    const r = rng(key + doc);
+    const dur = DOCS[doc].slot;
+    windowsFor(doc, date).forEach(([s, e]) => {
+      for (let t = s; t + dur * 60 <= e; t += dur * 60) {
+        if (FORCE_FREE.has(doc + ":" + t) && isToday) continue;
+        if (out.some((a) => a.doc === doc && t < a.t + a.dur * 60 && t + dur * 60 > a.t)) continue;
+        const fill = past ? 0.86 : isToday ? (t < START ? 0.9 : 0.72) : 0.62;
+        if (r() > fill) continue;
+        const name = NAMES[Math.floor(r() * NAMES.length)];
+        const type = TYPES[doc][Math.floor(r() * TYPES[doc].length)];
+        const payer = PAYERS[Math.floor(r() * PAYERS.length)];
+        let status;
+        if (past || (isToday && t + dur * 60 <= START)) status = r() < 0.08 ? "cancelada" : "concluida";
+        else status = r() < 0.66 ? "confirmada" : "agendada";
+        const a = { id: `${key}-${doc}-${hm(t)}-${n++}`, date: key, doc, t, dur, name, type, payer, status };
+        if (status === "confirmada") a.confirmedAt = T(7, 30) + Math.floor(r() * 7200);
+        if (status === "cancelada") a.cancelledAt = t - 86400;
+        out.push(a);
+      }
+    });
+  });
+  out.sort((a, b) => a.t - b.t || DOC_IDS.indexOf(a.doc) - DOC_IDS.indexOf(b.doc));
+  dayCache[key] = out;
+  return out;
+}
+
+const WAITLIST = { total: 7, byDoc: { okada: 3, ramos: 2, helena: 2, menezes: 0 } };
+
+/* status → tom, rótulo, ícone (cor nunca é o único sinal) */
+const STATUS = {
+  agendada: { label: "A confirmar", tone: "warn", icon: "Clock", cls: "border-dashed border-warn/40 bg-warn/[0.06] text-fg" },
+  confirmada: { label: "Confirmada", tone: "ai", icon: "CheckCheck", cls: "border-ai/30 bg-ai/[0.08] text-fg" },
+  checkin: { label: "Na clínica", tone: "fg", icon: "ScanLine", cls: "border-fg/20 bg-fg/[0.06] text-fg" },
+  consulta: { label: "Em atendimento", tone: "ok", icon: "Activity", cls: "border-ok/40 bg-ok/[0.10] text-fg", live: true },
+  concluida: { label: "Concluída", tone: "muted", icon: "CircleCheck", cls: "border-fg/[0.08] bg-sunken text-muted" },
+  cancelada: { label: "Desmarcada", tone: "bad", icon: "CalendarX2", cls: "border-dashed border-bad/40 bg-transparent text-muted line-through opacity-70" },
+  smartfill: { label: "Smart Waitlist", tone: "ai", icon: "Zap", cls: "border-ai/50 bg-ai/[0.10] text-fg" },
+  encaixe: { label: "Encaixe aberto", tone: "ai", icon: "ListPlus", cls: "border-dashed border-ai/40 bg-ai/[0.05] text-ai" },
+};
+const DOT = { ai: "bg-ai", ok: "bg-ok", warn: "bg-warn", bad: "bg-bad", fg: "bg-fg/70", muted: "bg-faint" };
+const TEXT = { ai: "text-ai", ok: "text-ok", warn: "text-warn", bad: "text-bad", fg: "text-fg", muted: "text-muted" };
+
+function primaryAction(a) {
+  switch (a.status) {
+    case "agendada": return { label: "Confirmar", icon: "CheckCheck", key: "confirm" };
+    case "confirmada": case "smartfill": return { label: "Fazer check-in", icon: "LogIn", key: "checkin" };
+    case "concluida": return { label: "Agendar retorno", icon: "CalendarPlus", key: "followup" };
+    case "encaixe": return { label: "Oferecer à lista de espera", icon: "Zap", key: "offer" };
+    default: return { label: "Reagendar", icon: "CalendarClock", key: "reschedule" };
+  }
+}
+
+/* perfil clínico sintético por paciente (determinístico pelo nome) */
+function profile(a) {
+  const h = hash(a.name);
+  const age = 24 + (h % 49);
+  const allergy = ["Sem alergias conhecidas", "Dipirona", "Penicilina", "Látex", "AAS"][h % 5];
+  const H = {
+    helena: ["Dermatite atópica em controle desde 2023; última crise em jun/2026.", "Mapeamento de nevos anual: 2 lesões em acompanhamento (dorso).", "Fotoproteção orientada; usa tacrolimo tópico sob demanda.", "Sem cirurgias dermatológicas prévias."],
+    ramos: ["Lesão de menisco medial (D) tratada de forma conservadora em 2025.", "Fisioterapia concluída em ago/2026; dor residual ao agachar.", "RX e RM do joelho anexados; sem instabilidade ligamentar.", "Faz corrida de rua 3x/semana — orientado a reduzir carga."],
+    okada: ["Hipertensão arterial estágio 1, em uso de losartana 50 mg.", "Episódios de palpitação no último mês, sem síncope.", "ECG de repouso 09/2026: ritmo sinusal, sem alterações agudas.", "Holter 24 h solicitado; laudo pendente."],
+    menezes: ["Diabetes tipo 2 desde 2021; HbA1c 7,1 % em jul/2026.", "Metformina 850 mg 2x/dia; sem hipoglicemias relatadas.", "TSH dentro da faixa no último exame.", "Meta de peso: -4 kg até dez/2026 (nutrição em paralelo)."],
+  }[a.doc];
+  const exams = {
+    helena: [{ k: "derm", t: "Dermatoscopia · dorso", d: "22/09/2026" }, { k: "lab", t: "Hemograma + VHS", d: "15/09/2026" }],
+    ramos: [{ k: "lab", t: "Painel pré-operatório", d: "30/09/2026" }, { k: "ecg", t: "ECG pré-anestésico", d: "30/09/2026" }],
+    okada: [{ k: "ecg", t: "ECG de repouso", d: "18/09/2026" }, { k: "lab", t: "Perfil lipídico", d: "18/09/2026" }, { k: "derm", t: "Eco · imagem 4C", d: "02/10/2026" }],
+    menezes: [{ k: "lab", t: "HbA1c + glicemia", d: "28/07/2026" }, { k: "lab", t: "TSH / T4 livre", d: "28/07/2026" }],
+  }[a.doc];
+  return { age, allergy, history: H, exams, phone: `(11) 9${pad(7000 + (h % 2999)).slice(0, 4)}-${pad(h % 9999)}` };
+}
+
+function thread(a, now) {
+  const d = DOCS[a.doc];
+  const date = fromKey(a.date);
+  const when = `${WD[date.getDay()]} ${shortDate(date)} às ${hm(a.t)}`;
+  const ask = { from: "copilot", t: T(7, 30), text: `Olá, ${first(a.name)}. Sua consulta com ${d.short} é ${when}. Responde SIM para confirmar ou REMARCAR para ver outros horários.` };
+  if (a.status === "agendada") return { msgs: [ask, { from: "copilot", t: T(9, 30), text: "Lembrete: ainda não recebemos sua confirmação. Podemos manter o horário?" }], status: { tone: "warn", icon: "Clock", text: "Sem resposta · 3º lembrete às 12:00" } };
+  if (a.status === "cancelada") return { msgs: [ask, { from: "patient", t: a.cancelledAt || T(10, 39), text: "Não vou conseguir ir hoje, preciso desmarcar." }, { from: "copilot", t: (a.cancelledAt || T(10, 39)) + 30, text: "Sem problema. Desmarquei e já ofereci o horário à lista de espera. Quer que eu sugira uma nova data?" }], status: { tone: "bad", icon: "CalendarX2", text: `Desmarcada ${hm(a.cancelledAt || T(10, 39))}` } };
+  if (a.status === "smartfill") return { msgs: [{ from: "copilot", t: a.openedAt + 60, text: `Abriu uma vaga hoje às ${hm(a.t)} com ${d.name}. Quer ficar com ela?` }, { from: "patient", t: a.smartFillAt - 60, text: "Quero sim! Consigo chegar." }, { from: "copilot", t: a.smartFillAt, text: `Confirmado. Te espero às ${hm(a.t)}, ${d.room}. Chega 10 minutos antes para o check-in.` }], status: { tone: "ai", icon: "Zap", text: `Vaga aceita ${hm(a.smartFillAt)} · lista de espera` } };
+  if (a.status === "encaixe") return { msgs: [{ from: "copilot", t: now, text: `Horário ${hm(a.t)} com ${d.short} reservado para encaixe. Vou oferecer à lista de espera assim que você confirmar.` }], status: { tone: "ai", icon: "ListPlus", text: "Aguardando oferta" } };
+  const c = a.confirmedAt || T(8, 5);
+  return { msgs: [ask, { from: "patient", t: c - 40, text: "SIM" }, { from: "copilot", t: c, text: `Perfeito, confirmado para ${when}. ${d.room}, chegue 10 min antes.` }], status: { tone: "ok", icon: "CheckCheck", text: `Confirmado ${hm(c)}` } };
+}
+
+/* ───────────────────────── small UI atoms (tela 1) ───────────────────────── */
+function Pulse({ tone = "ok", live = true }) {
+  return (
+    <span className="relative flex h-2 w-2 shrink-0">
+      {live && <span className={cx("absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping", DOT[tone])} />}
+      <span className={cx("relative inline-flex h-2 w-2 rounded-full", DOT[tone])} />
+    </span>
+  );
+}
+function Kbd({ children, className = "" }) {
+  return (
+    <kbd className={cx("inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] border border-fg/[0.12] bg-surface px-1 font-mono text-[11px] font-medium leading-none text-muted shadow-[0_1px_0_rgb(var(--fg)/0.06)]", className)}>
+      {children}
+    </kbd>
+  );
+}
+function DocTag({ id }) {
+  const d = DOCS[id];
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: d.color }} />
+      <span className="truncate">{d.short}</span>
+    </span>
+  );
+}
+function Avatar({ name, size = 32 }) {
+  return (
+    <span className="inline-flex shrink-0 items-center justify-center rounded-full border border-fg/[0.08] bg-sunken text-[11px] font-semibold tracking-wide text-fg/80" style={{ width: size, height: size }} aria-hidden="true">
+      {initials(name)}
+    </span>
+  );
+}
+function Payer({ payer }) {
+  return payer.kind === "part"
+    ? <span className="text-[12px] text-muted">Particular · <span className="font-mono tnum text-fg/80">{brl(payer.value)}</span></span>
+    : <span className="text-[12px] text-muted">{payer.label}</span>;
+}
+function Chip({ tone = "muted", icon, children, className = "" }) {
+  const map = {
+    ai: "bg-ai/[0.08] text-ai border-ai/20",
+    ok: "bg-ok/[0.08] text-ok border-ok/20",
+    warn: "bg-warn/[0.08] text-warn border-warn/25",
+    bad: "bg-bad/[0.08] text-bad border-bad/25",
+    fg: "bg-fg/[0.06] text-fg border-fg/[0.12]",
+    muted: "bg-sunken text-muted border-fg/[0.08]",
+  };
+  return (
+    <span className={cx("inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-[3px] text-[12px] font-medium leading-none", map[tone], className)}>
+      {icon && <Icon n={icon} size={12} sw={2} />}
+      <span className="truncate">{children}</span>
+    </span>
+  );
+}
+function Meter({ value, tone = "ok" }) {
+  return (
+    <div className="h-1 w-full overflow-hidden rounded-full bg-fg/[0.06]" role="presentation">
+      <div className={cx("h-full rounded-full transition-[width] duration-700 ease-out", DOT[tone])} style={{ width: `${Math.min(100, Math.max(2, value * 100))}%` }} />
+    </div>
+  );
+}
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => {
+    const t = document.documentElement.dataset.theme;
+    return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+  const toggle = () => { const next = !dark; document.documentElement.dataset.theme = next ? "dark" : "light"; setDark(next); };
+  useEffect(() => { window.__toggleTheme = toggle; });
+  return (
+    <button type="button" onClick={toggle} aria-label={dark ? "Usar tema claro" : "Usar tema escuro"}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-fg/[0.08] text-muted transition-colors hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">
+      <Icon n={dark ? "Sun" : "Moon"} size={15} />
+    </button>
+  );
+}
+
+/* ───────────────────────── cálculo de ocupação ───────────────────────── */
+function dayStats(key) {
+  const date = fromKey(key);
+  const appts = genDay(key);
+  let capacity = 0;
+  DOC_IDS.forEach((doc) => windowsFor(doc, date).forEach(([s, e]) => { capacity += Math.floor((e - s) / (DOCS[doc].slot * 60)); }));
+  const active = appts.filter((a) => a.status !== "cancelada");
+  const filled = active.filter((a) => a.status !== "encaixe").length;
+  return { capacity, filled, free: Math.max(0, capacity - filled), ratio: capacity ? filled / capacity : 0, smartfill: appts.filter((a) => a.status === "smartfill").length, cancelled: appts.filter((a) => a.status === "cancelada").length };
+}
+function freeSlots(key, appts, doc) {
+  const date = fromKey(key);
+  const dur = DOCS[doc].slot;
+  const out = [];
+  windowsFor(doc, date).forEach(([s, e]) => {
+    for (let t = s; t + dur * 60 <= e; t += dur * 60) {
+      if (FORCE_FREE.has(doc + ":" + t) && key === TODAY) continue;
+      const busy = appts.some((a) => a.doc === doc && a.status !== "cancelada" && t < a.t + a.dur * 60 && t + dur * 60 > a.t);
+      if (!busy) out.push({ key, doc, t, dur });
+    }
+  });
+  return out;
+}
+// Ocupação por hora (0..1) ou null quando ninguém atende naquela hora.
+function heatHour(key, h) {
+  const date = fromKey(key);
+  const hs = T(h, 0), he = T(h + 1, 0);
+  let cap = 0, used = 0;
+  DOC_IDS.forEach((doc) => windowsFor(doc, date).forEach(([s, e]) => { cap += Math.max(0, Math.min(e, he) - Math.max(s, hs)); }));
+  if (!cap) return null;
+  genDay(key).forEach((a) => { if (a.status === "cancelada") return; used += Math.max(0, Math.min(a.t + a.dur * 60, he) - Math.max(a.t, hs)); });
+  return Math.min(1, used / cap);
+}
+
+/* ───────────────────────── header ───────────────────────── */
+const VIEWS = [{ id: "day", label: "Dia", k: "1", icon: "Columns3" }, { id: "week", label: "Semana", k: "2", icon: "LayoutGrid" }, { id: "doctor", label: "Médico", k: "3", icon: "UserRound" }];
+
+function Header({ now, view, setView, cursor, setCursor, doctor, setDoctor, onOpenPalette, onNavigate }) {
+  const nav = [
+    { id: "cockpit", label: "Cockpit", icon: "LayoutGrid" },
+    { id: "agenda", label: "Agenda", icon: "CalendarDays", active: true },
+    { id: "comms", label: "Comms", icon: "MessagesSquare", badge: 2 },
+    { id: "pacientes", label: "Pacientes", icon: "UsersRound" },
+  ];
+  const isWeek = view !== "day";
+  const monday = mondayOf(cursor);
+  const label = isWeek
+    ? `${shortDate(monday)} – ${shortDate(addDays(monday, 5))} · ${monday.toLocaleDateString("pt-BR", { month: "long" })}`
+    : longDate(cursor);
+  const step = isWeek ? 7 : 1;
+  const isToday = dkey(cursor) === TODAY;
+  return (
+    <header className="sticky z-30 border-b border-fg/[0.08] bg-bg/80 backdrop-blur-xl" style={{ top: "env(safe-area-inset-top, 0px)" }}>
+      <div className="mx-auto flex h-14 max-w-[1680px] items-center gap-3 px-4 sm:px-6">
+        <div className="flex items-center gap-2">
+          <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-fg text-bg">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 12h4l2-5 4 10 2-5h6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight">ClinicFlow</span>
+          <span className="hidden text-[13px] text-faint lg:inline">/ {CLINIC}</span>
+        </div>
+        <nav className="ml-3 hidden items-center gap-0.5 md:flex" aria-label="Principal">
+          {nav.map((n) => (
+            <button key={n.id} type="button" onClick={() => !n.active && onNavigate(n.label)} aria-current={n.active ? "page" : undefined}
+              className={cx("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+                n.active ? "bg-sunken text-fg" : "text-muted hover:bg-sunken/70 hover:text-fg")}>
+              <Icon n={n.icon} size={14} />{n.label}
+              {n.badge && <span className="ml-0.5 rounded-full bg-ai/10 px-1.5 font-mono text-[11px] text-ai tnum">{n.badge}</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="flex-1" />
+        <button type="button" onClick={onOpenPalette}
+          className="inline-flex h-8 min-w-0 items-center gap-2 rounded-lg border border-fg/[0.08] bg-surface pl-2.5 pr-1.5 text-[13px] text-muted shadow-[0_1px_2px_rgb(var(--fg)/0.04)] transition-colors hover:border-fg/[0.16] hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 sm:w-64">
+          <Icon n="Search" size={14} />
+          <span className="hidden flex-1 truncate text-left sm:inline">Buscar paciente ou ação</span>
+          <span className="hidden items-center gap-0.5 sm:inline-flex"><Kbd>Ctrl</Kbd><Kbd>K</Kbd></span>
+        </button>
+        <ThemeToggle />
+        <span className="hidden items-center gap-2 border-l border-fg/[0.08] pl-3 sm:inline-flex">
+          <Avatar name="Carla Mendes" size={28} />
+          <span className="hidden flex-col leading-tight xl:flex"><span className="text-[13px] font-medium">Carla Mendes</span><span className="text-[11px] text-faint">Recepção · balcão 1</span></span>
+        </span>
+      </div>
+
+      <div className="mx-auto flex max-w-[1680px] flex-wrap items-center gap-x-3 gap-y-2 px-4 pb-3 sm:px-6">
+        <div role="radiogroup" aria-label="Visão da agenda" className="inline-flex items-center rounded-lg border border-fg/[0.08] bg-surface p-0.5">
+          {VIEWS.map((v) => (
+            <button key={v.id} type="button" role="radio" aria-checked={view === v.id} onClick={() => setView(v.id)}
+              className={cx("inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+                view === v.id ? "bg-fg text-bg" : "text-muted hover:bg-sunken hover:text-fg")}>
+              <Icon n={v.icon} size={13} />{v.label}
+              <Kbd className={view === v.id ? "border-bg/20 bg-bg/10 text-bg/80 shadow-none" : ""}>{v.k}</Kbd>
+            </button>
+          ))}
+        </div>
+        <div className="inline-flex items-center rounded-lg border border-fg/[0.08] bg-surface">
+          <button type="button" aria-label={isWeek ? "Semana anterior" : "Dia anterior"} onClick={() => setCursor(addDays(cursor, -step))} className="inline-flex h-8 w-8 items-center justify-center rounded-l-lg text-muted hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40"><Icon n="ChevronLeft" size={15} /></button>
+          <span className="min-w-[12rem] px-2 text-center text-[13px] font-medium first-letter:uppercase sm:min-w-[14rem]">{label}</span>
+          <button type="button" aria-label={isWeek ? "Próxima semana" : "Próximo dia"} onClick={() => setCursor(addDays(cursor, step))} className="inline-flex h-8 w-8 items-center justify-center rounded-r-lg text-muted hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40"><Icon n="ChevronRight" size={15} /></button>
+        </div>
+        <button type="button" onClick={() => setCursor(new Date(BASE_DATE))} aria-pressed={isToday}
+          className={cx("inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+            isToday ? "border-fg/[0.08] bg-surface text-muted" : "border-ai/30 bg-ai/[0.06] text-ai hover:bg-ai/[0.1]")}>
+          <Icon n="Undo2" size={13} />Hoje<Kbd>T</Kbd>
+        </button>
+        {view === "doctor" && (
+          <div role="radiogroup" aria-label="Profissional" className="flex flex-wrap items-center gap-1">
+            {DOC_IDS.map((id) => (
+              <button key={id} type="button" role="radio" aria-checked={doctor === id} onClick={() => setDoctor(id)}
+                className={cx("inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+                  doctor === id ? "border-fg/20 bg-sunken text-fg" : "border-fg/[0.08] bg-surface text-muted hover:text-fg")}>
+                <span className="h-2 w-2 rounded-full" style={{ background: DOCS[id].color }} />{DOCS[id].short}
+              </button>
+            ))}
+          </div>
+        )}
+        <span className="ml-auto inline-flex items-center gap-2 font-mono text-[13px] text-muted tnum" aria-live="off">
+          <Pulse tone="ok" />ao vivo · {hms(now)}
+        </span>
+      </div>
+    </header>
+  );
+}
+
+/* ───────────────────────── resumo do dia ───────────────────────── */
+function Stat({ icon, label, value, unit, sub, tone, action }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 bg-surface p-3.5 sm:p-4">
+      <div className="flex items-center gap-2 text-[12px] font-medium text-muted"><Icon n={icon} size={14} />{label}</div>
+      <div className={cx("font-mono text-[24px] font-medium leading-none tracking-tight tnum", tone ? TEXT[tone] : "")}>
+        {value}{unit && <span className="ml-0.5 text-[15px] text-muted">{unit}</span>}
+      </div>
+      <div className="flex min-w-0 items-center gap-2 text-[12px] leading-snug text-muted">
+        <span className="min-w-0 truncate">{sub}</span>
+        {action && <button type="button" onClick={action.run} className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-ai hover:bg-ai/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">{action.label}<Icon n="ArrowUpRight" size={12} /></button>}
+      </div>
+    </div>
+  );
+}
+function Summary({ dayKey, appts, now, onComms }) {
+  const s = dayStats(dayKey);
+  const isToday = dayKey === TODAY;
+  const free = DOC_IDS.flatMap((d) => freeSlots(dayKey, appts, d)).filter((f) => !isToday || f.t >= now);
+  const encaixes = DOC_IDS.reduce((n, d) => n + Math.min(free.filter((f) => f.doc === d).length, WAITLIST.byDoc[d] || 0), 0);
+  const nextFree = free.sort((a, b) => a.t - b.t)[0];
+  return (
+    <section aria-label="Resumo da agenda" className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-fg/[0.08] bg-fg/[0.08] shadow-[0_1px_2px_rgb(var(--fg)/0.04)] lg:grid-cols-4">
+      <Stat icon="Gauge" label="Ocupação do dia" value={Math.round(s.ratio * 100)} unit="%" sub={<><span className="font-mono tnum">{s.filled}</span> de <span className="font-mono tnum">{s.capacity}</span> horários · {s.smartfill ? `${s.smartfill} reposto pelo Copilot` : "sem reposições"}</>} />
+      <Stat icon="CalendarRange" label="Vagas livres" value={free.length} tone={free.length ? "ok" : undefined} sub={nextFree ? <>próxima <span className="font-mono tnum">{hm(nextFree.t)}</span> · {DOCS[nextFree.doc].short}</> : "agenda cheia"} />
+      <Stat icon="Zap" label="Encaixes possíveis" value={encaixes} tone="ai" sub="vagas com paciente compatível na lista" />
+      <Stat icon="ListOrdered" label="Lista de espera" value={WAITLIST.total} unit=" pacientes" sub={`Cardio ${WAITLIST.byDoc.okada} · Orto ${WAITLIST.byDoc.ramos} · Derm ${WAITLIST.byDoc.helena}`} action={{ label: "Comms", run: onComms }} />
+    </section>
+  );
+}
+
+/* ───────────────────────── bloco de consulta ───────────────────────── */
+function Block({ a, top, height, selected, onOpen, onSelect, compact }) {
+  const st = STATUS[a.status];
+  const tall = height >= 54;
+  const label = `${a.name}, ${hm(a.t)}, ${DOCS[a.doc].name}, ${st.label}`;
+  return (
+    <button
+      type="button"
+      data-aid={a.id}
+      aria-label={label}
+      aria-current={selected ? "true" : undefined}
+      onClick={() => onOpen(a.id)}
+      onFocus={() => onSelect(a.id)}
+      className={cx(
+        "absolute left-1 right-1 flex flex-col overflow-hidden rounded-lg border px-1.5 text-left transition-[box-shadow,border-color] duration-150 focus-visible:outline-none",
+        height < 30 ? "justify-center py-0" : "py-1",
+        st.cls,
+        selected ? "ring-[3px] ring-ai/25 border-ai/60 z-[3]" : "hover:border-fg/30 focus-visible:ring-[3px] focus-visible:ring-ai/25 z-[2]"
+      )}
+      style={{ top, height }}
+    >
+      <span className="flex min-w-0 items-center gap-1.5 leading-none">
+        <span className="shrink-0 font-mono text-[11px] text-muted tnum">{hm(a.t)}</span>
+        <span className={cx("min-w-0 truncate text-[12px] font-medium", a.status === "cancelada" ? "text-muted" : "")}>{compact ? first(a.name) + " " + (a.name.split(" ")[1] || "").slice(0, 1) + "." : a.name}</span>
+        {st.live && <Pulse tone="ok" />}
+        {a.status === "smartfill" && <Icon n="Zap" size={12} sw={2.2} className="ml-auto shrink-0 text-ai" />}
+      </span>
+      {a.status === "smartfill" && a.replaces && (
+        <span className="mt-0.5 truncate text-[11px] leading-none text-muted line-through decoration-bad/60">{a.replaces} · desmarcou</span>
+      )}
+      {tall && a.status !== "smartfill" && (
+        <span className={cx("mt-1 inline-flex items-center gap-1 text-[11px] leading-none", TEXT[st.tone])}><Icon n={st.icon} size={11} sw={2} />{st.label}{a.status !== "cancelada" && <span className="text-faint"> · {a.type}</span>}</span>
+      )}
+    </button>
+  );
+}
+
+function SmartFillCallout({ a, top, onOpen }) {
+  return (
+    <button type="button" onClick={() => onOpen(a.id)} aria-label={`Vaga ociosa preenchida automaticamente via Smart Waitlist, paciente ${a.name}. Abrir detalhes.`}
+      className="anim-pop absolute left-1 right-1 z-[4] flex flex-col gap-1 rounded-lg border border-ai/40 bg-surface p-2 text-left shadow-[0_24px_60px_-28px_rgb(var(--ai)/0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40"
+      style={{ top }}>
+      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-ai"><Pulse tone="ai" /><Icon n="Zap" size={12} sw={2.2} />Smart Waitlist</span>
+      <span className="text-[12px] leading-snug text-fg/90">Vaga ociosa preenchida automaticamente via Smart Waitlist <span className="whitespace-nowrap">(Paciente: <span className="font-medium">{a.name}</span>)</span></span>
+      <span className="font-mono text-[11px] text-muted tnum">{hm(a.t)} · reposta em {mmss(a.smartFillAt - a.openedAt)} · sem ligação</span>
+    </button>
+  );
+}
+
+function FreeSlot({ f, top, height, onClick, past, ghost }) {
+  // `ghost` = consulta desmarcada que abriu este horário; aparece riscada dentro da vaga, nunca por baixo dela.
+  return (
+    <button type="button" onClick={() => onClick(f)} disabled={past}
+      aria-label={`Horário livre ${hm(f.t)} com ${DOCS[f.doc].name}${ghost ? `, ${ghost.name} desmarcou` : ""}${past ? ", já passou" : ", reservar para encaixe"}`}
+      className={cx("group absolute left-1 right-1 z-[1] inline-flex min-w-0 items-center justify-center gap-1 overflow-hidden rounded-lg border border-dashed px-1.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+        past ? "border-fg/[0.06] text-faint/70" : ghost ? "border-bad/30 text-faint hover:border-ai/50 hover:bg-ai/[0.05] hover:text-ai" : "border-fg/[0.14] text-faint hover:border-ai/50 hover:bg-ai/[0.05] hover:text-ai")}
+      style={{ top, height }}>
+      <span className="shrink-0 font-mono tnum">{hm(f.t)}</span><span className="shrink-0">livre</span>
+      {ghost && <span className="inline-flex min-w-0 items-center gap-1 text-faint"><Icon n="CalendarX2" size={10} sw={2} className="shrink-0 text-bad/70" /><span className="truncate line-through decoration-bad/60">{first(ghost.name)} desmarcou</span></span>}
+      {!past && <Icon n="Plus" size={11} sw={2.2} className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />}
+    </button>
+  );
+}
+
+/* grade de tempo genérica: colunas = profissionais (Dia) ou dias (Médico) */
+function TimeGrid({ columns, now, selectedId, onOpen, onSelect, onFree, minColumn = 190 }) {
+  const hours = []; for (let h = 7; h < 19; h++) hours.push(h);
+  const H = (GRID_END - GRID_START) / 3600 * HOUR_PX;
+  const y = (t) => ((t - GRID_START) / 3600) * HOUR_PX;
+  const scrollRef = useRef(null);
+  useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = Math.max(0, y(now) - 180); }, []);
+  return (
+    <div className="overflow-hidden rounded-2xl border border-fg/[0.08] bg-surface shadow-[0_1px_2px_rgb(var(--fg)/0.04)]">
+      <div ref={scrollRef} className="max-h-[calc(100vh-280px)] min-h-[420px] overflow-auto overscroll-contain">
+        <div style={{ minWidth: 56 + columns.length * minColumn }}>
+          <div className="sticky top-0 z-[6] grid border-b border-fg/[0.08] bg-surface/95 backdrop-blur" style={{ gridTemplateColumns: `56px repeat(${columns.length}, minmax(0,1fr))` }}>
+            <div className="h-12 border-r border-fg/[0.06]" />
+            {columns.map((c) => (
+              <div key={c.key} className={cx("flex h-12 min-w-0 items-center gap-2 border-r border-fg/[0.06] px-3 last:border-r-0", c.isToday ? "bg-ai/[0.04]" : "")}>
+                {c.color && <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: c.color }} />}
+                <div className="min-w-0 leading-tight">
+                  <div className="flex items-center gap-1.5 text-[13px] font-semibold"><span className="truncate">{c.title}</span>{c.isToday && <Chip tone="ai" className="py-[2px]">hoje</Chip>}</div>
+                  <div className="truncate text-[11px] text-faint">{c.sub}</div>
+                </div>
+                <span className="ml-auto shrink-0 font-mono text-[12px] text-muted tnum">{c.count}</span>
+              </div>
+            ))}
+          </div>
+          <div className="relative grid" style={{ gridTemplateColumns: `56px repeat(${columns.length}, minmax(0,1fr))`, height: H }}>
+            <div className="relative border-r border-fg/[0.06]">
+              {hours.map((h) => <span key={h} className="absolute right-2 -translate-y-1/2 font-mono text-[11px] text-faint tnum" style={{ top: y(T(h, 0)) }}>{pad(h)}:00</span>)}
+            </div>
+            {columns.map((c) => {
+              const nowY = c.isToday && now >= GRID_START && now <= GRID_END ? y(now) : null;
+              const cancelled = c.appts.filter((a) => a.status === "cancelada");
+              const blocks = c.appts.filter((a) => a.status !== "cancelada");
+              return (
+                <div key={c.key} className={cx("relative border-r border-fg/[0.06] last:border-r-0", c.isToday ? "bg-ai/[0.02]" : "")}>
+                  {hours.map((h) => <span key={h} className="pointer-events-none absolute inset-x-0 border-t border-fg/[0.06]" style={{ top: y(T(h, 0)) }} />)}
+                  {hours.map((h) => <span key={h + "h"} className="pointer-events-none absolute inset-x-0 border-t border-dashed border-fg/[0.04]" style={{ top: y(T(h, 30)) }} />)}
+                  {c.closed.map(([s, e], i) => <span key={i} className="pointer-events-none absolute inset-x-0 bg-sunken/80" style={{ top: y(s), height: y(e) - y(s), backgroundImage: "repeating-linear-gradient(135deg, rgb(var(--fg)/0.025) 0 6px, transparent 6px 12px)" }} />)}
+                  {c.free.map((f) => <FreeSlot key={f.doc + f.t} f={f} top={y(f.t) + 1} height={f.dur / 60 * HOUR_PX - 3} onClick={onFree} past={c.isToday && f.t < now} ghost={cancelled.find((x) => x.t === f.t)} />)}
+                  {blocks.map((a) => <Block key={a.id} a={a} top={y(a.t) + 1} height={a.dur / 60 * HOUR_PX - 3} selected={a.id === selectedId} onOpen={onOpen} onSelect={onSelect} compact={c.compact} />)}
+                  {c.appts.filter((a) => a.status === "smartfill" && a.callout).map((a) => <SmartFillCallout key={a.id + "-c"} a={a} top={y(a.t + a.dur * 60) + 4} onOpen={onOpen} />)}
+                  {nowY !== null && (
+                    <div className="pointer-events-none absolute inset-x-0 z-[5] h-px bg-bad" style={{ top: nowY }} aria-hidden="true">
+                      <span className="absolute -left-1 -top-[3px] h-[7px] w-[7px] rounded-full bg-bad" />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {columns.some((c) => c.isToday) && now >= GRID_START && now <= GRID_END && (
+              <span className="pointer-events-none absolute left-0 z-[6] -translate-y-1/2 rounded-md bg-bad px-1 font-mono text-[11px] font-medium text-bg tnum" style={{ top: y(now), left: 6 }}>{hm(now)}</span>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-fg/[0.06] px-4 py-2 text-[12px] text-muted">
+        {["confirmada", "agendada", "checkin", "consulta", "concluida", "cancelada", "smartfill"].map((k) => (
+          <span key={k} className="inline-flex items-center gap-1.5"><span className={cx("inline-block h-2.5 w-2.5 rounded-[3px] border", STATUS[k].cls.split(" ").filter((c) => c.startsWith("border") || c.startsWith("bg")).join(" "))} /><Icon n={STATUS[k].icon} size={11} className={TEXT[STATUS[k].tone]} />{STATUS[k].label}</span>
+        ))}
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-px w-3 bg-bad" />agora</span>
+      </div>
+    </div>
+  );
+}
+
+function DayView({ dayKey, appts, now, selectedId, onOpen, onSelect, onFree }) {
+  const date = fromKey(dayKey);
+  const columns = DOC_IDS.map((doc) => {
+    const wins = windowsFor(doc, date);
+    const closed = [];
+    let cur = GRID_START;
+    wins.forEach(([s, e]) => { if (s > cur) closed.push([cur, s]); cur = e; });
+    if (cur < GRID_END) closed.push([cur, GRID_END]);
+    const mine = appts.filter((a) => a.doc === doc);
+    return { key: doc, title: DOCS[doc].short, sub: `${DOCS[doc].spec} · ${DOCS[doc].room}${wins.length ? "" : " · não atende"}`, color: DOCS[doc].color, isToday: dayKey === TODAY, count: mine.filter((a) => a.status !== "cancelada").length, appts: mine, free: freeSlots(dayKey, appts, doc), closed };
+  });
+  return <TimeGrid columns={columns} now={now} selectedId={selectedId} onOpen={onOpen} onSelect={onSelect} onFree={onFree} />;
+}
+
+function DoctorView({ doc, monday, now, selectedId, onOpen, onSelect, onFree, apptsFor }) {
+  const columns = WEEKDAYS.map((wd) => {
+    const date = addDays(monday, wd - 1);
+    const key = dkey(date);
+    const appts = apptsFor(key).filter((a) => a.doc === doc);
+    const wins = windowsFor(doc, date);
+    const closed = []; let cur = GRID_START;
+    wins.forEach(([s, e]) => { if (s > cur) closed.push([cur, s]); cur = e; });
+    if (cur < GRID_END) closed.push([cur, GRID_END]);
+    return { key, title: `${WD[date.getDay()]} ${date.getDate()}`, sub: wins.length ? wins.map(([s, e]) => `${hm(s)}–${hm(e)}`).join(" · ") : "não atende", isToday: key === TODAY, count: appts.filter((a) => a.status !== "cancelada").length, appts, free: freeSlots(key, apptsFor(key), doc), closed, compact: true };
+  });
+  // estatísticas da semana
+  let cap = 0, filled = 0, cancel = 0, sf = 0, agendada = 0;
+  columns.forEach((c) => { cap += c.free.length + c.appts.filter((a) => a.status !== "cancelada").length; filled += c.appts.filter((a) => a.status !== "cancelada" && a.status !== "encaixe").length; cancel += c.appts.filter((a) => a.status === "cancelada").length; sf += c.appts.filter((a) => a.status === "smartfill").length; agendada += c.appts.filter((a) => a.status === "agendada").length; });
+  const d = DOCS[doc];
+  return (
+    <div className="flex flex-col gap-4">
+      <section aria-label={`Utilização de ${d.name} na semana`} className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-fg/[0.08] bg-fg/[0.08] lg:grid-cols-4">
+        <div className="flex min-w-0 flex-col gap-1 bg-surface p-3.5 sm:p-4">
+          <div className="flex items-center gap-2 text-[12px] font-medium text-muted"><span className="h-2.5 w-2.5 rounded-full" style={{ background: d.color }} />{d.name}</div>
+          <div className="font-mono text-[24px] font-medium leading-none tracking-tight tnum">{Math.round((filled / Math.max(1, cap)) * 100)}<span className="ml-0.5 text-[15px] text-muted">%</span></div>
+          <div className="text-[12px] text-muted">utilização · <span className="font-mono tnum">{filled}</span> de <span className="font-mono tnum">{cap}</span> horários na semana</div>
+          <Meter value={filled / Math.max(1, cap)} tone={filled / Math.max(1, cap) >= 0.8 ? "ok" : "warn"} />
+        </div>
+        <Stat icon="CalendarRange" label="Livres na semana" value={cap - filled} tone={cap - filled ? "ok" : undefined} sub={`${WAITLIST.byDoc[doc] || 0} na lista de espera de ${d.spec.toLowerCase()}`} />
+        <Stat icon="Clock" label="A confirmar" value={agendada} tone={agendada ? "warn" : undefined} sub="Copilot insiste até 48 h antes" />
+        <Stat icon="Zap" label="Desmarcações repostas" value={`${sf}/${cancel}`} tone="ai" sub={cancel ? `${Math.round((sf / cancel) * 100)}% das vagas recuperadas` : "nenhuma desmarcação"} />
+      </section>
+      <TimeGrid columns={columns} now={now} selectedId={selectedId} onOpen={onOpen} onSelect={onSelect} onFree={onFree} minColumn={150} />
+    </div>
+  );
+}
+
+/* ───────────────────────── semana (heat map) ───────────────────────── */
+function WeekView({ monday, now, selectedId, onOpen, onSelect, apptsFor, setCursor, setView }) {
+  const hours = []; for (let h = 7; h < 19; h++) hours.push(h);
+  const days = WEEKDAYS.map((wd) => { const date = addDays(monday, wd - 1); const key = dkey(date); return { key, date, stats: dayStats(key), appts: apptsFor(key) }; });
+  return (
+    <div className="overflow-hidden rounded-2xl border border-fg/[0.08] bg-surface shadow-[0_1px_2px_rgb(var(--fg)/0.04)]">
+      <div className="overflow-x-auto">
+        <div className="min-w-[920px]">
+          <div className="grid border-b border-fg/[0.08]" style={{ gridTemplateColumns: "56px repeat(6, minmax(0,1fr))" }}>
+            <div className="border-r border-fg/[0.06]" />
+            {days.map((d) => {
+              const isToday = d.key === TODAY, pct = Math.round(d.stats.ratio * 100);
+              return (
+                <button key={d.key} type="button" onClick={() => { setCursor(d.date); setView("day"); }} aria-label={`Abrir ${longDate(d.date)} na visão Dia`}
+                  className={cx("flex min-w-0 flex-col gap-1 border-r border-fg/[0.06] px-3 py-2.5 text-left transition-colors last:border-r-0 hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ai/40", isToday ? "bg-ai/[0.04]" : "")}>
+                  <span className="flex items-center gap-2 leading-none">
+                    <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-faint">{WD[d.date.getDay()]}</span>
+                    <span className={cx("font-mono text-[15px] font-semibold tnum", isToday ? "text-ai" : "")}>{pad(d.date.getDate())}</span>
+                    {isToday && <Chip tone="ai" className="py-[2px]">hoje</Chip>}
+                    <span className={cx("ml-auto font-mono text-[13px] font-medium tnum", pct >= 85 ? "text-ok" : pct >= 60 ? "text-fg" : "text-warn")}>{pct}%</span>
+                  </span>
+                  <Meter value={d.stats.ratio} tone={pct >= 85 ? "ok" : pct >= 60 ? "fg" : "warn"} />
+                  <span className="truncate text-[11px] text-faint"><span className="font-mono tnum">{d.stats.filled}</span>/<span className="font-mono tnum">{d.stats.capacity}</span> · {d.stats.free} livres{d.stats.cancelled ? ` · ${d.stats.cancelled} desm.` : ""}</span>
+                </button>
+              );
+            })}
+          </div>
+          {hours.map((h) => (
+            <div key={h} className="grid border-b border-fg/[0.06] last:border-b-0" style={{ gridTemplateColumns: "56px repeat(6, minmax(0,1fr))" }}>
+              <div className="flex items-start justify-end border-r border-fg/[0.06] pr-2 pt-1.5 font-mono text-[11px] text-faint tnum">{pad(h)}:00</div>
+              {days.map((d) => {
+                const v = heatHour(d.key, h);
+                const inHour = d.appts.filter((a) => a.t >= T(h, 0) && a.t < T(h + 1, 0) && a.status !== "cancelada");
+                const isNow = d.key === TODAY && now >= T(h, 0) && now < T(h + 1, 0);
+                const shown = inHour.slice(0, 3);
+                return (
+                  <div key={d.key} role="group" aria-label={`${WD[d.date.getDay()]} ${pad(h)}:00, ${v === null ? "fechado" : Math.round(v * 100) + "% ocupado"}, ${inHour.length} consultas`}
+                    className={cx("relative min-h-[64px] border-r border-fg/[0.06] p-1 last:border-r-0", v === null ? "bg-sunken/70" : "", isNow ? "shadow-[inset_3px_0_0_rgb(var(--bad))]" : "")}
+                    style={v === null ? { backgroundImage: "repeating-linear-gradient(135deg, rgb(var(--fg)/0.025) 0 6px, transparent 6px 12px)" } : { background: `rgb(var(--ok) / ${(v * 0.42).toFixed(3)})` }}>
+                    {v !== null && <span className="pointer-events-none absolute right-1.5 top-1 font-mono text-[11px] text-muted tnum">{Math.round(v * 100)}%</span>}
+                    <div className="flex flex-col gap-[3px] pr-9">
+                      {shown.map((a) => {
+                        const st = STATUS[a.status];
+                        return (
+                          <button key={a.id} type="button" data-aid={a.id} onClick={() => onOpen(a.id)} onFocus={() => onSelect(a.id)} aria-label={`${a.name}, ${hm(a.t)}, ${DOCS[a.doc].name}, ${st.label}`} aria-current={a.id === selectedId ? "true" : undefined}
+                            className={cx("flex h-[18px] min-w-0 items-center gap-1 rounded-[5px] border px-1 text-left text-[11px] leading-none transition-colors focus-visible:outline-none", st.cls.replace("line-through", ""), a.id === selectedId ? "ring-2 ring-ai/40 border-ai/60" : "hover:border-fg/30 focus-visible:ring-2 focus-visible:ring-ai/40")}>
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: DOCS[a.doc].color }} />
+                            <span className="shrink-0 font-mono text-muted tnum">{hm(a.t)}</span>
+                            <span className="min-w-0 truncate font-medium">{first(a.name)}</span>
+                            {a.status === "smartfill" && <Icon n="Zap" size={10} sw={2.4} className="ml-auto shrink-0 text-ai" />}
+                            {st.live && <span className="ml-auto"><Pulse tone="ok" /></span>}
+                          </button>
+                        );
+                      })}
+                      {inHour.length > 3 && <button type="button" onClick={() => { setCursor(d.date); setView("day"); }} className="self-start rounded-[5px] px-1 text-[11px] font-medium text-muted hover:bg-fg/[0.06] hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">+{inHour.length - 3} mais</button>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-fg/[0.06] px-4 py-2 text-[12px] text-muted">
+        <span className="font-medium">Ocupação por hora</span>
+        {[0, 0.25, 0.5, 0.75, 1].map((v) => <span key={v} className="inline-flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-[3px] border border-fg/[0.08]" style={{ background: `rgb(var(--ok) / ${v * 0.42})` }} /><span className="font-mono tnum">{Math.round(v * 100)}%</span></span>)}
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-[3px] border border-fg/[0.08] bg-sunken" style={{ backgroundImage: "repeating-linear-gradient(135deg, rgb(var(--fg)/0.08) 0 2px, transparent 2px 4px)" }} />fechado</span>
+        <span className="ml-auto inline-flex items-center gap-1.5"><Icon n="Zap" size={11} className="text-ai" />reposto via Smart Waitlist · clique no dia para abrir em Dia</span>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── drawer ───────────────────────── */
+function Thumb({ kind }) {
+  if (kind === "ecg") return (
+    <svg viewBox="0 0 120 56" className="h-14 w-full rounded-md bg-sunken" aria-hidden="true">
+      <g stroke="rgb(var(--fg) / 0.06)" strokeWidth="1">{[14, 28, 42].map((y) => <line key={y} x1="0" x2="120" y1={y} y2={y} />)}{[20, 40, 60, 80, 100].map((x) => <line key={x} y1="0" y2="56" x1={x} x2={x} />)}</g>
+      <polyline fill="none" stroke="rgb(var(--ok))" strokeWidth="1.6" strokeLinejoin="round" points="0,32 10,32 14,28 18,32 24,32 27,12 30,46 33,32 48,32 52,28 56,32 62,32 65,12 68,46 71,32 86,32 90,28 94,32 100,32 103,12 106,46 109,32 120,32" />
+    </svg>
+  );
+  if (kind === "lab") return (
+    <div className="flex h-14 w-full flex-col justify-center gap-[5px] rounded-md bg-sunken px-2" aria-hidden="true">
+      {[[0.5, 0.2, "ok"], [0.6, 0.15, "ok"], [0.4, 0.25, "warn"], [0.55, 0.18, "ok"]].map(([a, b, t], i) => (
+        <div key={i} className="flex items-center gap-1.5"><span className="h-[3px] rounded-full bg-fg/20" style={{ width: `${a * 100}%` }} /><span className={cx("ml-auto h-[3px] rounded-full", DOT[t])} style={{ width: `${b * 100}%` }} /></div>
+      ))}
+    </div>
+  );
+  return (
+    <div className="flex h-14 w-full items-center justify-center rounded-md bg-sunken" aria-hidden="true">
+      <span className="h-10 w-10 rounded-full" style={{ background: "radial-gradient(circle at 42% 40%, rgb(var(--warn) / .75), rgb(var(--bad) / .55) 48%, rgb(var(--fg) / .25) 72%, rgb(var(--sunken)) 74%)" }} />
+    </div>
+  );
+}
+
+function Drawer({ a, now, open, onClose, onAction }) {
+  const panel = useRef(null);
+  useEffect(() => {
+    if (!open || !panel.current) return;
+    const el = panel.current;
+    const t = setTimeout(() => { const f = el.querySelector("[data-autofocus]"); (f || el).focus({ preventScroll: true }); }, 30);
+    return () => clearTimeout(t);
+  }, [open, a && a.id]);
+  const trap = (e) => {
+    if (e.key !== "Tab" || !panel.current) return;
+    const f = Array.from(panel.current.querySelectorAll("button, [href], input, [tabindex]:not([tabindex='-1'])")).filter((x) => !x.disabled);
+    if (!f.length) return;
+    const i = f.indexOf(document.activeElement);
+    if (e.shiftKey && (i <= 0)) { e.preventDefault(); f[f.length - 1].focus(); }
+    else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+  };
+  const st = a && STATUS[a.status];
+  const act = a && primaryAction(a);
+  const pr = a && profile(a);
+  const th = a && thread(a, now);
+  return (
+    <div className={cx("fixed inset-0 z-40 overflow-hidden", open ? "" : "pointer-events-none")} aria-hidden={!open}
+      style={{ visibility: open ? "visible" : "hidden", transitionProperty: "visibility", transitionDuration: "0s", transitionDelay: open ? "0s" : "320ms" }}>
+      <div className={cx("absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-200 sm:hidden", open ? "opacity-100" : "opacity-0")} onMouseDown={onClose} />
+      <section
+        ref={panel}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={a ? `Consulta de ${a.name}` : "Consulta"}
+        onKeyDown={trap}
+        className={cx("absolute bottom-0 right-0 top-0 flex w-full flex-col border-l border-fg/[0.1] bg-surface shadow-[0_32px_80px_-20px_rgb(0_0_0/0.35)] outline-none transition-transform duration-300 ease-[cubic-bezier(.2,.8,.2,1)] sm:w-[420px]", open ? "translate-x-0" : "translate-x-full")}
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      >
+        {a && (
+          <>
+            <div className="flex items-start gap-3 border-b border-fg/[0.08] p-4">
+              <Avatar name={a.name} size={40} />
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-[15px] font-semibold leading-tight">{a.name}</h2>
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-muted"><span>{pr.age} anos</span><span>·</span><Payer payer={a.payer} /><span>·</span><span className="font-mono tnum">{pr.phone}</span></p>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <Chip tone={st.tone} icon={st.icon}>{st.label}</Chip>
+                  <span className="inline-flex items-center gap-1.5 text-[12px] text-muted"><span className="font-mono tnum">{WD[fromKey(a.date).getDay()]} {shortDate(fromKey(a.date))} · {hm(a.t)}–{hm(a.t + a.dur * 60)}</span></span>
+                  <DocTag id={a.doc} />
+                </div>
+                <p className="mt-1 text-[12px] text-faint">{a.type} · {DOCS[a.doc].room}{a.eta ? ` · ${a.eta}` : ""}</p>
+              </div>
+              <button type="button" onClick={onClose} aria-label="Fechar painel" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40"><Icon n="X" size={15} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {a.status === "smartfill" && (
+                <div className="mx-4 mt-4 flex items-start gap-2 rounded-xl border border-ai/25 bg-ai/[0.06] p-3 text-[12.5px] leading-snug">
+                  <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-ai/10 text-ai"><Icon n="Zap" size={12} sw={2.2} /></span>
+                  <span>Vaga de <span className="font-mono tnum">{hm(a.t)}</span> aberta por {a.replaces} às <span className="font-mono tnum">{hm(a.openedAt)}</span> e reposta pelo Copilot às <span className="font-mono tnum">{hm(a.smartFillAt)}</span>. {first(a.name)} era o primeiro nome compatível da lista de espera de {DOCS[a.doc].spec.toLowerCase()}.</span>
+                </div>
+              )}
+              {a.status === "cancelada" && (
+                <div className="mx-4 mt-4 flex items-start gap-2 rounded-xl border border-bad/25 bg-bad/[0.06] p-3 text-[12.5px] leading-snug">
+                  <Icon n="CalendarX2" size={15} className="mt-0.5 shrink-0 text-bad" />
+                  <span>Desmarcada às <span className="font-mono tnum">{hm(a.cancelledAt)}</span> pelo WhatsApp. O horário foi oferecido à lista de espera pelo Smart Waitlist.</span>
+                </div>
+              )}
+
+              <section aria-labelledby="dr-hist" className="px-4 pt-4">
+                <div className="mb-2 flex items-center gap-2"><Icon n="Stethoscope" size={15} className="text-muted" /><h3 id="dr-hist" className="text-[13px] font-semibold">Resumo do histórico</h3><span className="ml-auto text-[11px] text-faint">prontuário integrado</span></div>
+                <ul className="flex flex-col gap-1.5 text-[12.5px] leading-snug text-fg/85">
+                  {pr.history.map((h, i) => <li key={i} className="flex gap-2"><span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-faint" />{h}</li>)}
+                </ul>
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  <Chip tone={pr.allergy.startsWith("Sem") ? "muted" : "bad"} icon={pr.allergy.startsWith("Sem") ? "ShieldCheck" : "ShieldAlert"}>Alergia: {pr.allergy}</Chip>
+                  <Chip tone="muted" icon="History">última visita 12/09</Chip>
+                </div>
+              </section>
+
+              <section aria-labelledby="dr-exams" className="px-4 pt-5">
+                <div className="mb-2 flex items-center gap-2"><Icon n="Paperclip" size={15} className="text-muted" /><h3 id="dr-exams" className="text-[13px] font-semibold">Anexos de exames</h3><span className="ml-auto font-mono text-[11px] text-faint tnum">{pr.exams.length}</span></div>
+                <ul className="grid grid-cols-2 gap-2">
+                  {pr.exams.map((ex, i) => (
+                    <li key={i}>
+                      <button type="button" onClick={() => onAction("exam", ex)} className="flex w-full flex-col gap-1.5 rounded-xl border border-fg/[0.08] bg-surface p-2 text-left transition-colors hover:border-fg/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">
+                        <Thumb kind={ex.k} />
+                        <span className="truncate text-[12px] font-medium">{ex.t}</span>
+                        <span className="font-mono text-[11px] text-faint tnum">{ex.d} · PDF</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <section aria-labelledby="dr-wa" className="px-4 pb-4 pt-5">
+                <div className="mb-2 flex items-center gap-2"><Icon n="MessageCircle" size={15} className="text-muted" /><h3 id="dr-wa" className="text-[13px] font-semibold">Conversa no WhatsApp</h3><span className={cx("ml-auto inline-flex items-center gap-1 text-[12px] font-medium", TEXT[th.status.tone])}><Icon n={th.status.icon} size={12} sw={2} />{th.status.text}</span></div>
+                <ol className="flex flex-col gap-1.5 rounded-xl border border-fg/[0.08] bg-sunken/60 p-2.5">
+                  {th.msgs.map((m, i) => (
+                    <li key={i} className={cx("flex max-w-[88%] flex-col gap-0.5 rounded-xl px-2.5 py-1.5 text-[12.5px] leading-snug", m.from === "copilot" ? "self-start rounded-bl-[4px] border border-fg/[0.08] bg-surface" : "self-end rounded-br-[4px] bg-ok/[0.12] text-fg")}>
+                      <span className="flex items-center gap-1 text-[11px] text-faint">{m.from === "copilot" ? <><Icon n="Sparkles" size={10} className="text-ai" />Copilot</> : first(a.name)} · <span className="font-mono tnum">{hm(m.t)}</span></span>
+                      <span>{m.text}</span>
+                    </li>
+                  ))}
+                </ol>
+                <button type="button" onClick={() => onAction("comms")} className="mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-fg/[0.1] text-[12px] font-medium text-fg/80 hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">Abrir conversa no Comms <Icon n="ArrowUpRight" size={13} /></button>
+              </section>
+            </div>
+
+            <div className="flex items-center gap-2 border-t border-fg/[0.08] p-3" style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))" }}>
+              <button type="button" data-autofocus onClick={() => onAction(act.key)} className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-fg/90 bg-fg px-3 text-[13px] font-medium text-bg hover:bg-fg/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">
+                <Icon n={act.icon} size={14} />{act.label}<Kbd className="border-bg/20 bg-bg/10 text-bg/80 shadow-none">↵</Kbd>
+              </button>
+              {act.key !== "reschedule" && a.status !== "concluida" && a.status !== "cancelada" && (
+                <button type="button" onClick={() => onAction("reschedule")} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-fg/[0.1] bg-surface px-3 text-[13px] font-medium text-fg/80 hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40"><Icon n="CalendarClock" size={14} />Reagendar</button>
+              )}
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/* ───────────────────────── overlays (tela 1) ───────────────────────── */
+function Overlay({ onClose, children, label, align = "top" }) {
+  return (
+    <div role="dialog" aria-modal="true" aria-label={label} className={cx("fixed inset-0 z-50 flex justify-center bg-black/40 px-4 backdrop-blur-[2px]", align === "top" ? "items-start pt-[12vh]" : "items-center")} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="anim-pop w-full max-w-[560px] overflow-hidden rounded-2xl border border-fg/[0.1] bg-surface shadow-[0_32px_80px_-20px_rgb(0_0_0/0.35)]">{children}</div>
+    </div>
+  );
+}
+
+function CommandPalette({ items, onClose }) {
+  const [q, setQ] = useState("");
+  const [idx, setIdx] = useState(0);
+  const listRef = useRef(null);
+  const filtered = useMemo(() => {
+    const n = norm(q.trim());
+    return n ? items.filter((it) => norm(it.label + " " + (it.hint || "") + " " + it.group).includes(n)) : items;
+  }, [q, items]);
+  useEffect(() => setIdx(0), [q]);
+  useEffect(() => { const el = listRef.current && listRef.current.querySelector(`[data-i="${idx}"]`); el && el.scrollIntoView({ block: "nearest" }); }, [idx]);
+  const run = (it) => { onClose(); it && it.run(); };
+  const onKey = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, filtered.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); run(filtered[idx]); }
+    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+  };
+  let lastGroup = null;
+  return (
+    <Overlay onClose={onClose} label="Busca rápida">
+      <div className="flex items-center gap-2.5 border-b border-fg/[0.08] px-4">
+        <Icon n="Search" size={16} className="text-muted" />
+        <input id="cmdk-input" autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="Paciente, profissional ou ação…" aria-label="Buscar"
+          className="h-12 flex-1 bg-transparent text-[15px] outline-none placeholder:text-faint" />
+        <Kbd>Esc</Kbd>
+      </div>
+      <ul ref={listRef} className="max-h-[52vh] overflow-y-auto p-1.5" role="listbox" aria-label="Resultados">
+        {filtered.length === 0 && <li className="px-3 py-8 text-center text-[13px] text-muted">Nada encontrado para “{q}”.</li>}
+        {filtered.map((it, i) => {
+          const head = it.group !== lastGroup ? (lastGroup = it.group) : null;
+          return (
+            <React.Fragment key={it.id}>
+              {head && <li className="px-2.5 pb-1 pt-2.5 text-[11px] font-medium uppercase tracking-[0.06em] text-faint" role="presentation">{head}</li>}
+              <li data-i={i} role="option" aria-selected={i === idx} onMouseMove={() => setIdx(i)} onClick={() => run(it)}
+                className={cx("flex cursor-default items-center gap-3 rounded-lg px-2.5 py-2", i === idx ? "bg-sunken" : "")}>
+                <span className={cx("inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-fg/[0.08]", it.tone ? TEXT[it.tone] : "text-muted")}><Icon n={it.icon} size={14} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-medium">{it.label}</span>
+                  {it.hint && <span className="block truncate text-[12px] text-muted">{it.hint}</span>}
+                </span>
+                {it.kbd && <span className="flex gap-0.5">{it.kbd.map((k) => <Kbd key={k}>{k}</Kbd>)}</span>}
+                {i === idx && <Icon n="CornerDownLeft" size={14} className="text-faint" />}
+              </li>
+            </React.Fragment>
+          );
+        })}
+      </ul>
+      <div className="flex items-center gap-4 border-t border-fg/[0.08] px-4 py-2 text-[12px] text-faint">
+        <span className="inline-flex items-center gap-1"><Kbd>↑</Kbd><Kbd>↓</Kbd> navegar</span>
+        <span className="inline-flex items-center gap-1"><Kbd>↵</Kbd> abrir</span>
+        <span className="ml-auto">{filtered.length} resultados</span>
+      </div>
+    </Overlay>
+  );
+}
+
+const SHORTCUTS = [
+  ["Visão Dia / Semana / Médico", ["1", "2", "3"]],
+  ["Dia ou semana anterior / seguinte", ["←", "→"]],
+  ["Voltar para hoje", ["T"]],
+  ["Consulta anterior / seguinte", ["↑", "↓"]],
+  ["Abrir painel da consulta (ou executar a ação principal)", ["↵"]],
+  ["Fechar painel", ["Esc"]],
+  ["Desfazer última ação", ["Z"]],
+  ["Busca rápida", ["Ctrl", "K"]],
+  ["Esta lista", ["?"]],
+];
+function ShortcutsDialog({ onClose }) {
+  const ref = useRef(null);
+  useEffect(() => { ref.current && ref.current.focus(); }, []);
+  return (
+    <Overlay onClose={onClose} label="Atalhos de teclado" align="center">
+      <div ref={ref} tabIndex={-1} onKeyDown={(e) => (e.key === "Escape" || e.key === "?") && onClose()} className="outline-none">
+        <div className="flex items-center gap-2 border-b border-fg/[0.08] p-4"><Icon n="Keyboard" size={16} className="text-muted" /><h2 className="text-[15px] font-semibold">Atalhos da agenda</h2><span className="ml-auto"><Kbd>Esc</Kbd></span></div>
+        <ul className="divide-y divide-fg/[0.06] px-4 py-1">
+          {SHORTCUTS.map(([label, keys]) => (
+            <li key={label} className="flex items-center justify-between gap-4 py-2.5 text-[13px]"><span>{label}</span><span className="flex gap-1">{keys.map((k) => <Kbd key={k}>{k}</Kbd>)}</span></li>
+          ))}
+        </ul>
+      </div>
+    </Overlay>
+  );
+}
+
+function Toast({ toast, onUndo, onClose }) {
+  if (!toast) return null;
+  return (
+    <div className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-4" style={{ bottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}>
+      <div key={toast.id} role="status" className="anim-pop pointer-events-auto flex max-w-[560px] items-center gap-3 rounded-xl border border-fg/[0.1] bg-fg py-2 pl-3 pr-2 text-[13px] text-bg shadow-[0_20px_50px_-20px_rgb(0_0_0/0.5)]">
+        <Icon n={toast.icon || "Check"} size={15} className={toast.tone === "ai" ? "text-[rgb(var(--ai))]" : "text-[rgb(var(--ok))]"} />
+        <span className="min-w-0 flex-1">{toast.msg}</span>
+        {toast.undo && (
+          <button type="button" onClick={onUndo} className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 font-medium text-bg/80 hover:bg-bg/10">
+            Desfazer <Kbd className="border-bg/20 bg-bg/10 text-bg/80 shadow-none">Z</Kbd>
+          </button>
+        )}
+        <button type="button" onClick={onClose} aria-label="Fechar aviso" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-bg/60 hover:bg-bg/10"><Icon n="X" size={14} /></button>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── app ───────────────────────── */
+function App() {
+  const [now, setNow] = useState(START);
+  const [view, setView] = useState("day");
+  const [cursor, setCursor] = useState(new Date(BASE_DATE));
+  const [doctor, setDoctor] = useState("okada");
+  const [overrides, setOverrides] = useState({}); // dateKey → appts (edições locais sobre o mock)
+  const [selectedId, setSelectedId] = useState(null);
+  const [drawerId, setDrawerId] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const [help, setHelp] = useState(false);
+  const [toast, setToast] = useState(null);
+  const lastFocusRef = useRef(null);
+
+  useEffect(() => { const t = setInterval(() => setNow((n) => n + 1), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 6000); return () => clearTimeout(t); }, [toast]);
+
+  const apptsFor = useCallback((key) => overrides[key] || genDay(key), [overrides]);
+  const dayKey = dkey(cursor);
+  const monday = mondayOf(cursor);
+  const dayAppts = apptsFor(dayKey);
+
+  // lista ordenada de consultas visíveis (para ↑↓)
+  const ordered = useMemo(() => {
+    // Desmarcadas ficam fora da navegação por teclado: a reposta (smartfill) já conta a história.
+    if (view === "day") return dayAppts.filter((a) => a.status !== "cancelada");
+    const days = WEEKDAYS.map((wd) => dkey(addDays(monday, wd - 1)));
+    const all = days.flatMap((k) => apptsFor(k)).filter((a) => a.status !== "cancelada");
+    return view === "doctor" ? all.filter((a) => a.doc === doctor) : all;
+  }, [view, dayAppts, monday, doctor, apptsFor]);
+
+  const findAppt = (id) => { for (const k of Object.keys(dayCache).concat(Object.keys(overrides))) { const a = apptsFor(k).find((x) => x.id === id); if (a) return a; } return null; };
+  const drawerAppt = drawerId ? findAppt(drawerId) : null;
+
+  const showToast = (msg, opts = {}) => setToast({ id: Math.random(), msg, ...opts });
+  const focusBlock = (id) => requestAnimationFrame(() => {
+    const el = document.querySelector(`[data-aid="${id}"]`);
+    if (el) { el.focus({ preventScroll: true }); el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" }); }
+  });
+
+  const openDrawer = (id) => { lastFocusRef.current = id; setSelectedId(id); setDrawerId(id); setDrawerOpen(true); };
+  const closeDrawer = () => { setDrawerOpen(false); const id = lastFocusRef.current; id && focusBlock(id); };
+
+  const patchAppt = (id, fields) => {
+    const a = findAppt(id); if (!a) return null;
+    const prev = overrides;
+    setOverrides((o) => ({ ...o, [a.date]: apptsFor(a.date).map((x) => (x.id === id ? { ...x, ...fields } : x)) }));
+    return prev;
+  };
+
+  function action(key, payload) {
+    const a = drawerAppt; if (!a && key !== "exam" && key !== "comms") return;
+    if (key === "comms") { closeDrawer(); navigate("O Comms"); return; }
+    if (key === "exam") { showToast(`Abrindo ${payload.t} (${payload.d}) no visualizador de documentos`, { icon: "FileText", tone: "ai" }); return; }
+    if (key === "confirm") {
+      const prev = patchAppt(a.id, { status: "confirmada", confirmedAt: now });
+      showToast(`${a.name} confirmado manualmente · Copilot para de lembrar`, { icon: "CheckCheck", undo: prev });
+    } else if (key === "checkin") {
+      const prev = patchAppt(a.id, { status: "checkin", checkedInAt: now });
+      showToast(`${a.name} fez check-in · aparece no Cockpit em "Na recepção"`, { icon: "LogIn", undo: prev });
+      closeDrawer();
+    } else if (key === "followup") {
+      showToast(`Copilot vai propor retorno em 30 dias a ${first(a.name)} pelo WhatsApp`, { icon: "CalendarPlus", tone: "ai" });
+    } else if (key === "offer") {
+      showToast(`Vaga ${hm(a.t)} oferecida a ${WAITLIST.byDoc[a.doc] || 0} pacientes da lista de espera · acompanhe no Comms`, { icon: "Zap", tone: "ai" });
+      closeDrawer();
+    } else if (key === "reschedule") {
+      showToast(`Copilot enviou 3 horários a ${first(a.name)} pelo WhatsApp · a vaga ${hm(a.t)} vai para o Smart Waitlist se ele aceitar`, { icon: "CalendarClock", tone: "ai" });
+      closeDrawer();
+    }
+  }
+
+  function reserveFree(f) {
+    const target = f.key || dayKey;
+    const prev = overrides;
+    const id = `${target}-${f.doc}-${hm(f.t)}-enc`;
+    const a = { id, date: target, doc: f.doc, t: f.t, dur: f.dur, name: "Lista de espera", type: "Encaixe", payer: conv("a definir"), status: "encaixe" };
+    setOverrides((o) => ({ ...o, [target]: [...apptsFor(target), a].sort((x, y) => x.t - y.t) }));
+    showToast(`Encaixe ${hm(f.t)} · ${DOCS[f.doc].short} reservado. Copilot oferece à lista de espera.`, { icon: "ListPlus", tone: "ai", undo: prev });
+    setSelectedId(id); focusBlock(id);
+  }
+
+  function undo() {
+    if (!toast || !toast.undo) return;
+    setOverrides(toast.undo);
+    setToast({ id: Math.random(), msg: "Ação desfeita", icon: "Undo2", tone: "ai" });
+  }
+
+  const navigate = (label) => showToast(`${label} é outra tela desta série. A agenda continua ao vivo.`, { icon: "LayoutGrid", tone: "ai" });
+
+  function move(dir) {
+    if (!ordered.length) return;
+    let i = ordered.findIndex((a) => a.id === selectedId);
+    if (i < 0) i = dir > 0 ? -1 : ordered.length;
+    i = Math.max(0, Math.min(ordered.length - 1, i + dir));
+    const id = ordered[i].id;
+    setSelectedId(id); focusBlock(id);
+    if (drawerOpen) { setDrawerId(id); lastFocusRef.current = id; }
+  }
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const k = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && k === "k") { e.preventDefault(); setPalette((o) => !o); return; }
+      if (palette || help) return;
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "/") { e.preventDefault(); setPalette(true); return; }
+      if (e.key === "?") { e.preventDefault(); setHelp(true); return; }
+      if (e.key === "Escape") { if (drawerOpen) closeDrawer(); else setSelectedId(null); return; }
+      if (k === "z") { e.preventDefault(); undo(); return; }
+      if (k === "t") { e.preventDefault(); setCursor(new Date(BASE_DATE)); return; }
+      if (["1", "2", "3"].includes(e.key)) { e.preventDefault(); setView(VIEWS[Number(e.key) - 1].id); return; }
+      if (k === "arrowleft" || k === "arrowright") { e.preventDefault(); setCursor((c) => addDays(c, (k === "arrowleft" ? -1 : 1) * (view === "day" ? 1 : 7))); return; }
+      if (k === "arrowdown" || k === "arrowup") { e.preventDefault(); move(k === "arrowdown" ? 1 : -1); return; }
+      if (e.key === "Enter") {
+        if (tag === "button" || tag === "a") return; // o clique nativo já faz o trabalho
+        if (drawerOpen && drawerAppt) { e.preventDefault(); action(primaryAction(drawerAppt).key); return; }
+        if (selectedId) { e.preventDefault(); openDrawer(selectedId); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const closeOverlay = (setter) => () => { setter(false); const id = lastFocusRef.current || selectedId; id && focusBlock(id); };
+
+  const paletteItems = useMemo(() => {
+    const items = dayAppts.filter((a) => a.status !== "encaixe").map((a) => ({
+      id: "p-" + a.id, group: dayKey === TODAY ? "Consultas de hoje" : `Consultas de ${shortDate(cursor)}`, icon: a.status === "smartfill" ? "Zap" : "UserRound", tone: a.status === "smartfill" ? "ai" : undefined, label: a.name,
+      hint: `${hm(a.t)} · ${DOCS[a.doc].short} · ${STATUS[a.status].label}`,
+      run: () => { if (view !== "day") setView("day"); openDrawer(a.id); },
+    }));
+    const actions = [
+      { id: "a-day", group: "Ações", icon: "Columns3", label: "Visão Dia", kbd: ["1"], run: () => setView("day") },
+      { id: "a-week", group: "Ações", icon: "LayoutGrid", label: "Visão Semana", hint: "Mapa de calor de ocupação", kbd: ["2"], run: () => setView("week") },
+      { id: "a-doc", group: "Ações", icon: "UserRound", label: "Visão por médico", kbd: ["3"], run: () => setView("doctor") },
+      { id: "a-today", group: "Ações", icon: "Undo2", label: "Ir para hoje", kbd: ["T"], run: () => setCursor(new Date(BASE_DATE)) },
+      { id: "a-sf", group: "Ações", icon: "Zap", tone: "ai", label: "Ver vaga reposta pelo Smart Waitlist", hint: "14:00 · Dr. Ramos · Mariana Costa", run: () => { setCursor(new Date(BASE_DATE)); setView("day"); const a = genDay(TODAY).find((x) => x.status === "smartfill" && x.callout); a && openDrawer(a.id); } },
+      { id: "a-theme", group: "Ações", icon: "SunMoon", label: "Alternar tema claro e escuro", run: () => window.__toggleTheme && window.__toggleTheme() },
+      { id: "a-help", group: "Ações", icon: "Keyboard", label: "Mostrar atalhos de teclado", kbd: ["?"], run: () => setHelp(true) },
+    ];
+    const docs = DOC_IDS.map((id) => ({ id: "d-" + id, group: "Profissionais", icon: "Stethoscope", label: DOCS[id].name, hint: `${DOCS[id].spec} · agenda da semana`, run: () => { setDoctor(id); setView("doctor"); } }));
+    const nav = [
+      { id: "n-cockpit", group: "Ir para", icon: "LayoutGrid", label: "Cockpit", hint: "Fluxo ao vivo da clínica", run: () => navigate("O Cockpit") },
+      { id: "n-comms", group: "Ir para", icon: "MessagesSquare", label: "Comms e Smart Waitlist", hint: `${WAITLIST.total} pacientes na lista de espera`, run: () => navigate("O Comms") },
+      { id: "n-p360", group: "Ir para", icon: "UsersRound", label: "Paciente 360", hint: "Ficha, exames e continuidade", run: () => navigate("O Paciente 360") },
+    ];
+    return [...actions, ...items, ...docs, ...nav];
+  }, [dayAppts, dayKey, view]);
+
+  return (
+    <div className="min-h-full">
+      <Header now={now} view={view} setView={setView} cursor={cursor} setCursor={setCursor} doctor={doctor} setDoctor={setDoctor} onOpenPalette={() => setPalette(true)} onNavigate={navigate} />
+
+      <main className="mx-auto flex max-w-[1680px] flex-col gap-4 px-4 pb-24 pt-4 sm:px-6">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
+          <h1 className="text-[15px] font-semibold tracking-tight">{view === "day" ? "Agenda do dia" : view === "week" ? "Semana" : `Agenda de ${DOCS[doctor].short}`}</h1>
+          <span className="text-[12px] text-muted">{view === "day" ? "uma coluna por profissional · horários livres clicáveis" : view === "week" ? "ocupação por hora · clique no dia para abrir" : "seis dias lado a lado · utilização da semana"}</span>
+          <button type="button" onClick={() => setHelp(true)} className="ml-auto hidden items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted hover:bg-sunken hover:text-fg sm:inline-flex"><Kbd>?</Kbd>atalhos</button>
+        </div>
+
+        {view !== "doctor" && <Summary dayKey={view === "day" ? dayKey : TODAY} appts={view === "day" ? dayAppts : apptsFor(TODAY)} now={now} onComms={() => navigate("O Comms")} />}
+
+        {view === "day" && <DayView dayKey={dayKey} appts={dayAppts} now={now} selectedId={selectedId} onOpen={openDrawer} onSelect={setSelectedId} onFree={reserveFree} />}
+        {view === "week" && <WeekView monday={monday} now={now} selectedId={selectedId} onOpen={openDrawer} onSelect={setSelectedId} apptsFor={apptsFor} setCursor={setCursor} setView={setView} />}
+        {view === "doctor" && <DoctorView doc={doctor} monday={monday} now={now} selectedId={selectedId} onOpen={openDrawer} onSelect={setSelectedId} onFree={reserveFree} apptsFor={apptsFor} />}
+
+        <footer className="hidden flex-wrap items-center gap-x-4 gap-y-2 border-t border-fg/[0.06] px-1 pt-3 text-[12px] text-muted md:flex">
+          {[["1 2 3", "visão"], ["← →", view === "day" ? "dia" : "semana"], ["T", "hoje"], ["↑ ↓", "consulta"], ["↵", "abrir"], ["Esc", "fechar"], ["Z", "desfazer"]].map(([k, l]) => (
+            <span key={k} className="inline-flex items-center gap-1.5"><Kbd>{k}</Kbd>{l}</span>
+          ))}
+          <span className="ml-auto text-faint">Dados de exemplo · {CLINIC}</span>
+        </footer>
+      </main>
+
+      <Drawer a={drawerAppt} now={now} open={drawerOpen && !!drawerAppt} onClose={closeDrawer} onAction={action} />
+      {palette && <CommandPalette items={paletteItems} onClose={closeOverlay(setPalette)} />}
+      {help && <ShortcutsDialog onClose={closeOverlay(setHelp)} />}
+      <Toast toast={toast} onUndo={undo} onClose={() => setToast(null)} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>

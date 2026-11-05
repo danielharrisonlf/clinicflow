@@ -1,8 +1,12 @@
-import { INestApplication, ValidationPipe } from "@nestjs/common";
+import { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import { AppModule } from "@/app.module";
 import { AllExceptionsFilter } from "@/common/filters/all-exceptions.filter";
+import {
+  AppValidationPipe,
+  GLOBAL_VALIDATION_OPTIONS,
+} from "@/common/pipes/app-validation.pipe";
 
 /**
  * Fluxo ponta a ponta da recepção: entrar → cadastrar → agendar → confirmar →
@@ -28,13 +32,9 @@ describe("ClinicFlow — fluxo da recepção (e2e)", () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix("api/v1", { exclude: ["health"] });
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
+    // O mesmo pipe global do main.ts: com um ValidationPipe puro, toda request
+    // validada pelo Zod (login incluso) era recusada com 400.
+    app.useGlobalPipes(new AppValidationPipe(GLOBAL_VALIDATION_OPTIONS));
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
   });
@@ -178,6 +178,42 @@ describe("ClinicFlow — fluxo da recepção (e2e)", () => {
     expect(response.body.details).toHaveProperty("patientName");
   });
 
+  it("aceita o encaixe explícito no horário ocupado e marca isOverbooked", async () => {
+    const server = app.getHttpServer();
+    const body = {
+      patientId,
+      professionalId,
+      date: nextWeekday(),
+      time: "16:00",
+      type: "CONSULTA",
+    };
+
+    // Antes da migração do encaixe, a trava do banco devolvia 500 aqui.
+    const encaixe = await auth(request(server).post("/api/v1/appointments"))
+      .send({ ...body, allowOverbooking: true })
+      .expect(201);
+    expect(encaixe.body.isOverbooked).toBe(true);
+
+    const events = await auth(
+      request(server).get(`/api/v1/appointments/${encaixe.body.id}/audit`),
+    ).expect(200);
+    const reasons = events.body.data.map(
+      (e: { reason: string | null }) => e.reason,
+    );
+    expect(reasons).toContain("Encaixe autorizado pela recepção");
+
+    // O encaixe não abre o horário para quem não pediu encaixe.
+    await auth(request(server).post("/api/v1/appointments"))
+      .send(body)
+      .expect(409);
+
+    await auth(
+      request(server).patch(`/api/v1/appointments/${encaixe.body.id}/cancel`),
+    )
+      .send({ reasonCode: "OUTRO", note: "Limpeza do teste e2e" })
+      .expect(200);
+  });
+
   it("percorre a máquina de estados até concluir", async () => {
     await auth(
       request(app.getHttpServer()).patch(
@@ -300,12 +336,26 @@ describe("ClinicFlow — fluxo da recepção (e2e)", () => {
   });
 
   it("responde a paleta de comandos com ações e pacientes", async () => {
-    const response = await auth(
-      request(app.getHttpServer()).get("/api/v1/search?q=Luiza"),
-    ).expect(200);
+    const server = app.getHttpServer();
 
-    expect(response.body.actions.length).toBeGreaterThan(0);
-    expect(response.body.patients.length).toBeGreaterThan(0);
+    // As ações são filtradas pelo título: um nome de paciente não casa com
+    // nenhuma delas, e a paleta mostra só o grupo de pacientes.
+    const byPatient = await auth(
+      request(server).get("/api/v1/search?q=Luiza"),
+    ).expect(200);
+    expect(byPatient.body.actions).toEqual([]);
+    expect(byPatient.body.patients.length).toBeGreaterThan(0);
+
+    const byAction = await auth(
+      request(server).get("/api/v1/search?q=consulta"),
+    ).expect(200);
+    expect(byAction.body.actions.map((a: { id: string }) => a.id)).toContain(
+      "new-appointment",
+    );
+
+    // Sem termo, a paleta abre com as ações principais.
+    const empty = await auth(request(server).get("/api/v1/search")).expect(200);
+    expect(empty.body.actions.length).toBeGreaterThan(0);
   });
 
   it("recusa arquivo acima do limite antes de qualquer byte subir", async () => {
@@ -322,6 +372,257 @@ describe("ClinicFlow — fluxo da recepção (e2e)", () => {
 
     expect(response.body.code).toBe("FILE_TOO_LARGE");
     expect(response.body.message).toContain("10 MB");
+  });
+
+  it("aceita os filtros das listagens validadas pelo Zod", async () => {
+    const server = app.getHttpServer();
+    const today = new Date().toISOString().slice(0, 10);
+
+    await auth(
+      request(server).get("/api/v1/patients?page=1&limit=15&orderBy=name"),
+    ).expect(200);
+    await auth(
+      request(server).get("/api/v1/patients?hasPendencies=true"),
+    ).expect(200);
+    await auth(request(server).get("/api/v1/documents?page=1&limit=15")).expect(
+      200,
+    );
+    await auth(
+      request(server).get(
+        "/api/v1/tasks?page=1&limit=15&status=ABERTA&status=EM_ANDAMENTO",
+      ),
+    ).expect(200);
+    await auth(
+      request(server).get(
+        `/api/v1/appointments?date=${today}&derivedState=ATRASADA`,
+      ),
+    ).expect(200);
+    await auth(
+      request(server).get(
+        `/api/v1/notifications?appointmentId=${appointmentId}`,
+      ),
+    ).expect(200);
+  });
+
+  it("filtra a agenda por vários status repetindo o parâmetro", async () => {
+    const response = await auth(
+      request(app.getHttpServer()).get(
+        `/api/v1/appointments?date=${nextWeekday()}&limit=50&status=AGENDADA&status=CONCLUIDA`,
+      ),
+    ).expect(200);
+
+    const statuses: string[] = response.body.data.map(
+      (item: { status: string }) => item.status,
+    );
+    expect(statuses).toContain("CONCLUIDA");
+    for (const status of statuses) {
+      expect(["AGENDADA", "CONCLUIDA"]).toContain(status);
+    }
+  });
+
+  it("pagina a agenda de verdade (página 2 diferente da 1)", async () => {
+    const day = nextWeekday();
+    const [first, second] = await Promise.all([
+      auth(
+        request(app.getHttpServer()).get(
+          `/api/v1/appointments?date=${day}&page=1&limit=1`,
+        ),
+      ).expect(200),
+      auth(
+        request(app.getHttpServer()).get(
+          `/api/v1/appointments?date=${day}&page=2&limit=1`,
+        ),
+      ).expect(200),
+    ]);
+
+    expect(first.body.meta.itemCount).toBeGreaterThan(1);
+    expect(second.body.data[0].id).not.toBe(first.body.data[0].id);
+  });
+
+  it("continua recusando entrada inválida nas listagens", async () => {
+    const server = app.getHttpServer();
+    await auth(request(server).get("/api/v1/patients?limit=1000")).expect(400);
+    await auth(request(server).get("/api/v1/patients?page=0")).expect(400);
+    await auth(request(server).get("/api/v1/appointments?status=FOO")).expect(
+      400,
+    );
+    await auth(request(server).get("/api/v1/professionals?foo=1")).expect(400);
+    await auth(
+      request(server).get("/api/v1/notifications?appointmentId=nope"),
+    ).expect(400);
+  });
+
+  it("ignora a própria consulta na checagem de disponibilidade", async () => {
+    const created = await auth(
+      request(app.getHttpServer()).post("/api/v1/appointments"),
+    )
+      .send({
+        patientId,
+        professionalId,
+        date: nextWeekday(),
+        time: "17:00",
+        type: "CONSULTA",
+      })
+      .expect(201);
+
+    const check = (extra: Record<string, string>) =>
+      auth(
+        request(app.getHttpServer()).post("/api/v1/appointments/availability"),
+      )
+        .send({ professionalId, date: nextWeekday(), time: "17:00", ...extra })
+        .expect(200);
+
+    expect((await check({})).body.conflicts).toHaveLength(1);
+    expect(
+      (await check({ excludeAppointmentId: created.body.id })).body.conflicts,
+    ).toHaveLength(0);
+    expect(
+      (await check({ ignoreAppointmentId: created.body.id })).body.conflicts,
+    ).toHaveLength(0);
+  });
+
+  it("desfaz o início do atendimento de uma consulta da semente", async () => {
+    // A semente antiga gravava o check-in "das 09:32" mesmo rodando de
+    // madrugada; ordenado por createdAt, esse evento futuro passava na frente
+    // do "Iniciar" e o desfazer respondia 422 UNDO_NOT_ALLOWED.
+    const server = app.getHttpServer();
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+    }).format(new Date());
+    const waiting = await auth(
+      request(server).get(
+        `/api/v1/appointments?date=${today}&status=CHECK_IN&limit=50`,
+      ),
+    ).expect(200);
+    const target = waiting.body.data[0];
+    expect(target).toBeDefined();
+
+    await auth(request(server).patch(`/api/v1/appointments/${target.id}/start`))
+      .expect(200)
+      .expect((res) => expect(res.body.status).toBe("EM_ATENDIMENTO"));
+
+    const undone = await auth(
+      request(server).post(`/api/v1/appointments/${target.id}/undo`),
+    ).expect(200);
+    expect(undone.body.status).toBe("CHECK_IN");
+    expect(undone.body.startedAt).toBeNull();
+  });
+
+  it("reagenda com encaixe para um horário ocupado", async () => {
+    const server = app.getHttpServer();
+    const day = nextWeekday();
+    const base = { patientId, professionalId, date: day, type: "CONSULTA" };
+
+    const occupied = await auth(request(server).post("/api/v1/appointments"))
+      .send({ ...base, time: "11:00" })
+      .expect(201);
+    const moving = await auth(request(server).post("/api/v1/appointments"))
+      .send({ ...base, time: "11:30" })
+      .expect(201);
+    expect(moving.body.isOverbooked).toBe(false);
+
+    const url = `/api/v1/appointments/${moving.body.id}/reschedule`;
+    const conflict = await auth(request(server).patch(url))
+      .send({ date: day, time: "11:00", reason: "Teste e2e" })
+      .expect(409);
+    expect(conflict.body.code).toBe("APPOINTMENT_SLOT_CONFLICT");
+
+    const moved = await auth(request(server).patch(url))
+      .send({
+        date: day,
+        time: "11:00",
+        reason: "Teste e2e",
+        allowOverbooking: true,
+      })
+      .expect(200);
+    expect(moved.body.isOverbooked).toBe(true);
+
+    for (const id of [occupied.body.id, moved.body.id]) {
+      await auth(request(server).patch(`/api/v1/appointments/${id}/cancel`))
+        .send({ reasonCode: "OUTRO", note: "Limpeza do teste e2e" })
+        .expect(200);
+    }
+  });
+
+  it("recusa com 409, e não 500, desfazer um cancelamento cujo horário foi ocupado", async () => {
+    const server = app.getHttpServer();
+    const slot = {
+      patientId,
+      professionalId,
+      date: nextWeekday(),
+      time: "12:00",
+      type: "CONSULTA",
+    };
+
+    const cancelled = await auth(request(server).post("/api/v1/appointments"))
+      .send(slot)
+      .expect(201);
+    await auth(
+      request(server).patch(`/api/v1/appointments/${cancelled.body.id}/cancel`),
+    )
+      .send({ reasonCode: "PACIENTE_DESMARCOU" })
+      .expect(200);
+    const taker = await auth(request(server).post("/api/v1/appointments"))
+      .send(slot)
+      .expect(201);
+
+    const undo = await auth(
+      request(server).post(`/api/v1/appointments/${cancelled.body.id}/undo`),
+    ).expect(409);
+    expect(undo.body.code).toBe("APPOINTMENT_SLOT_CONFLICT");
+    expect(undo.body.message).toContain("Não dá para desfazer");
+
+    await auth(
+      request(server).patch(`/api/v1/appointments/${taker.body.id}/cancel`),
+    )
+      .send({ reasonCode: "OUTRO", note: "Limpeza do teste e2e" })
+      .expect(200);
+  });
+
+  it("desfazer um reagendamento cancela a consulta nova", async () => {
+    const original = await auth(
+      request(app.getHttpServer()).post("/api/v1/appointments"),
+    )
+      .send({
+        patientId,
+        professionalId,
+        date: nextWeekday(),
+        time: "15:00",
+        type: "CONSULTA",
+      })
+      .expect(201);
+
+    const rescheduled = await auth(
+      request(app.getHttpServer()).patch(
+        `/api/v1/appointments/${original.body.id}/reschedule`,
+      ),
+    )
+      .send({ date: nextWeekday(), time: "15:30", reason: "Teste e2e" })
+      .expect(200);
+    expect(rescheduled.body.id).not.toBe(original.body.id);
+
+    const undone = await auth(
+      request(app.getHttpServer()).post(
+        `/api/v1/appointments/${original.body.id}/undo`,
+      ),
+    ).expect(200);
+    expect(undone.body.status).toBe("AGENDADA");
+
+    const successor = await auth(
+      request(app.getHttpServer()).get(
+        `/api/v1/appointments/${rescheduled.body.id}`,
+      ),
+    ).expect(200);
+    expect(successor.body.status).toBe("CANCELADA");
+
+    // O vínculo único foi solto: a original pode ser reagendada de novo.
+    await auth(
+      request(app.getHttpServer()).patch(
+        `/api/v1/appointments/${original.body.id}/reschedule`,
+      ),
+    )
+      .send({ date: nextWeekday(), time: "15:30", reason: "Segunda tentativa" })
+      .expect(200);
   });
 
   function auth(req: request.Test): request.Test {

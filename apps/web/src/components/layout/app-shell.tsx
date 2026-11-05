@@ -1,236 +1,508 @@
-import { Menu, Search } from "lucide-react";
-import { useState } from "react";
-import { NavLink, Outlet } from "react-router";
-import { Kbd, MOD_KEY } from "@/components/ui/kbd";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useQuery } from "@tanstack/react-query";
+import {
+  ChevronsUpDown,
+  LogOut,
+  Menu as MenuIcon,
+  Plus,
+  Search,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import { ButtonLink, IconButton } from "@/components/ui/button";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { isTypingTarget, Kbd, MOD_KEY } from "@/components/ui/kbd";
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
+import { Overlay, overlayOpen } from "@/components/ui/overlay";
+import { Avatar } from "@/components/ui/surface";
+import { ThemeMenuItems, ThemeToggle } from "@/components/ui/theme-toggle";
+import { setClinicTimeZone } from "@/features/appointments/labels";
 import { useAuth } from "@/features/auth/auth-context";
+import { settingsApi, waitingRoomApi } from "@/lib/api/endpoints";
+import { qk } from "@/lib/query";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS, PRIMARY_NAV, SECONDARY_NAV } from "./navigation";
+import { BrandMark } from "./brand";
+import {
+  isNavActive,
+  NAV_ITEMS,
+  type NavItem,
+  PRIMARY_NAV,
+  SECONDARY_NAV,
+} from "./navigation";
 
 /**
  * Casca da aplicação. A navegação muda de forma por breakpoint, não de conteúdo:
- * lateral rotulada no desktop, trilho de ícone no tablet, bottom nav no mobile.
+ * barra lateral rotulada no desktop, trilho de ícones no tablet, barra superior
+ * + bottom nav no celular. Busca e "Nova consulta" existem em todas as formas.
  */
-export function AppShell({ onOpenCommand }: { onOpenCommand: () => void }) {
+export function AppShell({
+  onOpenCommand,
+  detailOpen = false,
+}: {
+  onOpenCommand: () => void;
+  detailOpen?: boolean;
+}) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Ref: o pai recria a função a cada render, e o listener não precisa
+  // ser religado por isso.
+  const openCommandRef = useRef(onOpenCommand);
+  openCommandRef.current = onOpenCommand;
+
+  // A navegação por teclado chega ao conteúdo novo sem atravessar toda a barra.
+  useEffect(() => {
+    if (!overlayOpen()) {
+      document.getElementById("conteudo")?.focus({ preventScroll: true });
+    }
+  }, [location.pathname]);
+
+  // Atalhos de uma tecla do balcão: / busca (além de Ctrl/⌘K), N nova
+  // consulta, S sala de espera. Param dentro de campo e com qualquer
+  // sobreposição aberta.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTypingTarget(event.target) || overlayOpen()) return;
+      if (document.querySelector('[role="menu"]')) return;
+      const key = event.key.toLowerCase();
+      if (key === "/") {
+        // Sem o preventDefault o Firefox abriria a busca rápida da página.
+        event.preventDefault();
+        openCommandRef.current();
+      } else if (key === "n") {
+        event.preventDefault();
+        navigate("/consultas/nova");
+      } else if (key === "s") {
+        event.preventDefault();
+        navigate("/sala-de-espera");
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navigate]);
 
   return (
     <div className="flex min-h-dvh bg-surface-app">
-      <SideNav />
+      <a
+        href="#conteudo"
+        className="sr-only z-[80] rounded-control bg-accent px-4 py-2 font-semibold text-ink-onaccent focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+      >
+        Pular para o conteúdo
+      </a>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <SideNav onOpenCommand={onOpenCommand} />
+
+      {/* Área de trabalho no surface-app: os painéis do bento (surface-base +
+          micro-borda) é que sobem dela. */}
+      <div className="flex min-w-0 flex-1 flex-col bg-surface-app md:min-h-dvh md:border-l md:border-border-subtle">
         <MobileTopBar onOpenCommand={onOpenCommand} />
-        {/* pb-20 abre espaço para a bottom nav fixa; ela não pode cobrir conteúdo. */}
-        <main className="min-w-0 flex-1 px-4 py-4 pb-20 md:px-6 md:py-6 md:pb-6">
-          <Outlet />
+        <main
+          id="conteudo"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-screen-2xl min-w-0 flex-1 px-4 pt-4 pb-[calc(var(--spacing-bottom-nav)+1.5rem+env(safe-area-inset-bottom))] outline-none sm:px-5 md:px-6 md:py-6 lg:px-8 lg:py-7"
+        >
+          <ErrorBoundary resetKey={location.pathname}>
+            <Outlet context={{ detailOpen }} />
+          </ErrorBoundary>
         </main>
       </div>
 
-      <BottomNav onMore={() => setMoreOpen(true)} />
-      {moreOpen ? <MoreSheet onClose={() => setMoreOpen(false)} /> : null}
+      <BottomNav
+        onMore={() => setMoreOpen(true)}
+        pathname={location.pathname}
+      />
+      <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
     </div>
   );
 }
 
-function SideNav() {
-  const { user, logout } = useAuth();
+function useClinicName(): string {
+  const settings = useQuery({
+    queryKey: qk.settings.general,
+    queryFn: settingsApi.get,
+    staleTime: 5 * 60_000,
+  });
+  const timezone = settings.data?.timezone;
+  useEffect(() => setClinicTimeZone(timezone), [timezone]);
+  return settings.data?.clinicName ?? "";
+}
+
+/** Contagem viva da sala de espera no item de navegação. */
+function useWaitingCount(): number | undefined {
+  const metrics = useQuery({
+    queryKey: qk.waitingRoom.metrics,
+    queryFn: waitingRoomApi.metrics,
+    refetchInterval: 60_000,
+  });
+  return metrics.data?.waitingCount;
+}
+
+function SideNav({ onOpenCommand }: { onOpenCommand: () => void }) {
+  const clinicName = useClinicName();
+  const waiting = useWaitingCount();
+  const { pathname } = useLocation();
 
   return (
     <nav
       aria-label="Navegação principal"
-      className="hidden shrink-0 flex-col border-r border-border-subtle bg-surface-app md:flex md:w-[72px] lg:w-[212px]"
+      className="sticky top-0 hidden h-dvh shrink-0 flex-col bg-surface-app md:flex md:w-rail lg:w-sidebar"
     >
-      <div className="flex h-16 items-center gap-2 px-4 lg:px-5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-control bg-accent font-mono text-micro font-bold text-ink-onaccent">
-          CF
-        </span>
+      <div className="flex h-18 shrink-0 items-center gap-3 px-4 max-lg:justify-center lg:px-4">
+        <BrandMark />
         <span className="hidden min-w-0 lg:block">
-          <span className="block truncate text-body font-semibold text-ink-primary">
+          <span className="block truncate text-card font-bold tracking-tight text-ink-primary">
             ClinicFlow
           </span>
-          <span className="block truncate text-micro text-ink-tertiary">
-            Clínica Viver
-          </span>
+          {clinicName ? (
+            <span className="block truncate text-label text-ink-secondary">
+              {clinicName}
+            </span>
+          ) : null}
         </span>
       </div>
 
-      <ul className="flex flex-1 flex-col gap-0.5 px-2 lg:px-3">
-        {NAV_ITEMS.map((item) => (
-          <li key={item.to}>
-            <NavLink
-              to={item.to}
-              end={item.to === "/"}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-raised transition-colors duration-150",
-                  "px-2 py-2.5 lg:px-3",
-                  "max-lg:flex-col max-lg:gap-1 max-lg:px-1",
-                  isActive
-                    ? "bg-accent-weak text-accent"
-                    : "text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary",
-                )
-              }
-            >
-              <item.icon className="size-5 shrink-0" aria-hidden="true" />
-              <span className="hidden text-body font-semibold lg:block">
-                {item.label}
-              </span>
-              <span className="text-[11px] font-semibold lg:hidden">
-                {item.shortLabel}
-              </span>
-            </NavLink>
-          </li>
-        ))}
-      </ul>
-
-      <div className="flex flex-col gap-2 border-t border-border-subtle p-3">
-        <div className="max-lg:hidden">
-          <ThemeToggle />
-        </div>
+      <div className="flex shrink-0 flex-col gap-2 px-3 pb-3 max-lg:items-center">
         <button
           type="button"
-          onClick={() => void logout()}
-          className="flex w-full items-center gap-2 rounded-raised px-1 py-2 text-left transition-colors hover:bg-surface-sunken lg:px-2"
+          onClick={onOpenCommand}
+          aria-label="Buscar paciente, profissional ou ação"
+          title={`Buscar (${MOD_KEY === "⌘" ? "⌘K" : "Ctrl K"} ou /)`}
+          aria-keyshortcuts={`${MOD_KEY === "⌘" ? "Meta+K" : "Control+K"} /`}
+          className="flex h-9 w-full items-center gap-2 rounded-control border border-border-subtle bg-surface-base px-3 text-left text-label text-ink-tertiary shadow-panel transition-colors hover:border-border-default hover:text-ink-primary max-lg:size-11 max-lg:justify-center max-lg:px-0"
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-weak font-mono text-micro font-bold text-accent">
-            {initials(user?.name)}
-          </span>
-          <span className="hidden min-w-0 lg:block">
-            <span className="block truncate text-micro font-semibold text-ink-primary">
-              {user?.name ?? "—"}
-            </span>
-            <span className="block truncate text-micro text-ink-tertiary">
-              {user?.roleLabel ?? ""}
-            </span>
-          </span>
+          <Search className="size-4 shrink-0" aria-hidden="true" />
+          <span className="flex-1 truncate max-lg:hidden">Buscar…</span>
+          <Kbd className="max-lg:hidden">
+            {MOD_KEY === "⌘" ? "⌘K" : "Ctrl K"}
+          </Kbd>
         </button>
+        <ButtonLink
+          to="/consultas/nova"
+          block
+          aria-keyshortcuts="N"
+          className="max-lg:size-11 max-lg:px-0"
+          aria-label="Nova consulta"
+          title="Nova consulta (N)"
+        >
+          <Plus aria-hidden="true" />
+          <span className="max-lg:hidden">Nova consulta</span>
+          <Kbd className="ml-auto border-transparent bg-ink-onaccent/15 text-ink-onaccent max-lg:hidden">
+            N
+          </Kbd>
+        </ButtonLink>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3 pt-2 [scrollbar-width:thin] max-lg:px-1.5">
+        <NavGroup
+          label="Atendimento"
+          items={NAV_ITEMS.filter((item) => item.group === "atendimento")}
+          pathname={pathname}
+          badges={{ "/sala-de-espera": waiting }}
+        />
+        <NavGroup
+          label="Gestão"
+          items={NAV_ITEMS.filter((item) => item.group === "gestao")}
+          pathname={pathname}
+        />
+      </div>
+
+      <div className="shrink-0 border-t border-border-subtle p-3 max-lg:flex max-lg:justify-center">
+        <UserMenu placement="right-end" />
       </div>
     </nav>
   );
 }
 
-function MobileTopBar({ onOpenCommand }: { onOpenCommand: () => void }) {
+function NavGroup({
+  label,
+  items,
+  pathname,
+  badges = {},
+}: {
+  label: string;
+  items: NavItem[];
+  pathname: string;
+  badges?: Record<string, number | undefined>;
+}) {
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border-subtle bg-surface-base px-4 md:hidden">
-      <span className="flex size-7 items-center justify-center rounded-control bg-accent font-mono text-[11px] font-bold text-ink-onaccent">
-        CF
-      </span>
-      <span className="text-body font-semibold text-ink-primary">
-        ClinicFlow
-      </span>
-      <button
-        type="button"
-        onClick={onOpenCommand}
-        aria-label="Buscar paciente, profissional ou ação"
-        className="ml-auto flex size-11 items-center justify-center rounded-control text-ink-secondary transition-colors hover:bg-surface-sunken"
+    <div className="border-t border-border-subtle pt-3 first:border-0 first:pt-0">
+      {/* Um dos dois lugares onde a caixa-alta é permitida (DESIGN.md). */}
+      <p className="px-3 pb-2 text-micro font-semibold tracking-wider text-ink-tertiary uppercase max-lg:sr-only">
+        {label}
+      </p>
+      <ul className="flex flex-col gap-0.5">
+        {items.map((item) => {
+          const active = isNavActive(item, pathname);
+          const badge = badges[item.to];
+          return (
+            <li key={item.to}>
+              <NavLink
+                to={item.to}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "group relative flex items-center gap-3 rounded-control px-3 py-2 transition-colors duration-150",
+                  "max-lg:flex-col max-lg:gap-1 max-lg:px-1 max-lg:py-2",
+                  active
+                    ? "bg-accent-weak text-accent-ink"
+                    : "text-ink-secondary hover:bg-surface-hover hover:text-ink-primary",
+                )}
+              >
+                <item.icon
+                  className="size-4.5 shrink-0"
+                  strokeWidth={active ? 2 : 1.75}
+                  aria-hidden="true"
+                />
+                <span
+                  className={cn(
+                    "flex-1 truncate text-label max-lg:hidden",
+                    active ? "font-semibold" : "font-medium",
+                  )}
+                >
+                  {item.label}
+                </span>
+                <span className="max-w-full text-center text-micro leading-tight font-semibold [overflow-wrap:anywhere] lg:hidden">
+                  {item.shortLabel}
+                </span>
+                {badge ? (
+                  <span className="min-w-5 rounded-full bg-state-espera-weak px-1.5 text-center font-mono text-micro font-semibold text-state-espera max-lg:absolute max-lg:top-1 max-lg:right-2">
+                    {badge}
+                    <span className="sr-only"> aguardando</span>
+                  </span>
+                ) : null}
+              </NavLink>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function UserMenu({
+  placement,
+  compact = false,
+}: {
+  placement: "right-end" | "bottom-end";
+  compact?: boolean;
+}) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  return (
+    <Menu
+      label="Conta"
+      placement={placement}
+      trigger={(props) => (
+        <button
+          type="button"
+          {...props}
+          aria-label={`Conta de ${user?.name ?? "usuário"}`}
+          className={cn(
+            "flex items-center gap-2.5 rounded-control text-left transition-colors hover:bg-surface-hover",
+            compact
+              ? "size-11 justify-center"
+              : "w-full p-1.5 max-lg:size-11 max-lg:justify-center max-lg:p-0",
+          )}
+        >
+          <Avatar name={user?.name} size={compact ? "sm" : "md"} />
+          {compact ? null : (
+            <>
+              <span className="min-w-0 flex-1 max-lg:hidden">
+                <span className="block truncate text-body font-semibold text-ink-primary">
+                  {user?.name ?? "—"}
+                </span>
+                <span className="block truncate text-label text-ink-secondary">
+                  {user?.roleLabel ?? ""}
+                </span>
+              </span>
+              <ChevronsUpDown
+                className="size-4 shrink-0 text-ink-tertiary max-lg:hidden"
+                aria-hidden="true"
+              />
+            </>
+          )}
+        </button>
+      )}
+    >
+      <MenuLabel>
+        <span className="block font-semibold text-ink-primary">
+          {user?.name}
+        </span>
+        <span className="block">
+          {user?.roleLabel} · {user?.email}
+        </span>
+      </MenuLabel>
+      <MenuSeparator />
+      <ThemeMenuItems />
+      <MenuSeparator />
+      <MenuItem
+        tone="danger"
+        icon={<LogOut />}
+        onSelect={() => {
+          void logout().then(() => navigate("/entrar", { replace: true }));
+        }}
       >
-        <Search className="size-5" aria-hidden="true" />
-      </button>
+        Sair da conta
+      </MenuItem>
+    </Menu>
+  );
+}
+
+function MobileTopBar({ onOpenCommand }: { onOpenCommand: () => void }) {
+  const clinicName = useClinicName();
+  return (
+    // Header móvel: camada sobreposta ao conteúdo que rola, por isso vidro.
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-2.5 border-b border-border-subtle bg-surface-glass px-3 backdrop-blur-md md:hidden">
+      <BrandMark size="sm" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-body font-bold text-ink-primary">
+          ClinicFlow
+        </span>
+        {clinicName ? (
+          <span className="block truncate text-micro text-ink-secondary">
+            {clinicName}
+          </span>
+        ) : null}
+      </span>
+      <IconButton
+        label="Buscar paciente, profissional ou ação"
+        onClick={onOpenCommand}
+      >
+        <Search aria-hidden="true" />
+      </IconButton>
+      <UserMenu placement="bottom-end" compact />
     </header>
   );
 }
 
-function BottomNav({ onMore }: { onMore: () => void }) {
+function BottomNav({
+  onMore,
+  pathname,
+}: {
+  onMore: () => void;
+  pathname: string;
+}) {
+  const moreActive = SECONDARY_NAV.some((item) => isNavActive(item, pathname));
+  const waiting = useWaitingCount();
+
   return (
     <nav
       aria-label="Navegação"
-      className="fixed inset-x-0 bottom-0 z-30 flex h-16 border-t border-border-subtle bg-surface-base md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-border-subtle bg-surface-base pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      {PRIMARY_NAV.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.to === "/"}
-          className={({ isActive }) =>
-            cn(
-              "flex flex-1 flex-col items-center justify-center gap-1",
-              isActive ? "text-accent" : "text-ink-tertiary",
-            )
-          }
-        >
-          <item.icon className="size-5" aria-hidden="true" />
-          <span className="text-[11px] font-semibold">{item.shortLabel}</span>
-        </NavLink>
-      ))}
+      {PRIMARY_NAV.map((item) => {
+        const active = isNavActive(item, pathname);
+        const badge = item.to === "/sala-de-espera" ? waiting : undefined;
+        return (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "relative flex h-bottom-nav flex-1 flex-col items-center justify-center gap-1",
+              active ? "text-accent-ink" : "text-ink-secondary",
+            )}
+          >
+            <span
+              className={cn(
+                "flex h-7 w-12 items-center justify-center rounded-full transition-colors",
+                active && "bg-accent-weak",
+              )}
+            >
+              <item.icon className="size-5" aria-hidden="true" />
+            </span>
+            <span className="text-micro font-semibold">{item.shortLabel}</span>
+            {badge ? (
+              <span className="absolute top-1.5 left-[calc(50%+6px)] min-w-4.5 rounded-full bg-state-espera px-1 text-center font-mono text-micro leading-4.5 font-semibold text-surface-base">
+                {badge}
+                <span className="sr-only"> aguardando</span>
+              </span>
+            ) : null}
+          </NavLink>
+        );
+      })}
       <button
         type="button"
         onClick={onMore}
-        className="flex flex-1 flex-col items-center justify-center gap-1 text-ink-tertiary"
+        aria-haspopup="dialog"
+        className={cn(
+          "flex h-bottom-nav flex-1 flex-col items-center justify-center gap-1",
+          moreActive ? "text-accent-ink" : "text-ink-secondary",
+        )}
       >
-        <Menu className="size-5" aria-hidden="true" />
-        <span className="text-[11px] font-semibold">Mais</span>
+        <span
+          className={cn(
+            "flex h-7 w-12 items-center justify-center rounded-full",
+            moreActive && "bg-accent-weak",
+          )}
+        >
+          <MenuIcon className="size-5" aria-hidden="true" />
+        </span>
+        <span className="text-micro font-semibold">Mais</span>
       </button>
     </nav>
   );
 }
 
 /** Os destinos que não cabem nos cinco slots da bottom nav. */
-function MoreSheet({ onClose }: { onClose: () => void }) {
+function MoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user, logout } = useAuth();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   return (
-    <div className="fixed inset-0 z-40 md:hidden">
-      <button
-        type="button"
-        aria-label="Fechar"
-        onClick={onClose}
-        className="absolute inset-0 bg-ink-primary/30"
-      />
-      <div className="absolute inset-x-0 bottom-0 rounded-t-modal bg-surface-base p-4 pb-6 shadow-panel">
-        <p className="px-2 pb-2 text-micro font-semibold text-ink-tertiary">
-          {user?.name} — {user?.roleLabel}
-        </p>
-        <div className="px-2 pb-3">
-          <ThemeToggle />
-        </div>
-        <ul className="flex flex-col">
-          {SECONDARY_NAV.map((item) => (
+    <Overlay
+      open={open}
+      onClose={onClose}
+      title="Mais opções"
+      description={user ? `${user.name} — ${user.roleLabel}` : undefined}
+      initialFocus="container"
+    >
+      <ul className="-mx-2 flex flex-col">
+        {SECONDARY_NAV.map((item) => {
+          const active = isNavActive(item, pathname);
+          return (
             <li key={item.to}>
               <NavLink
                 to={item.to}
                 onClick={onClose}
-                className="flex min-h-12 items-center gap-3 rounded-raised px-2 text-body font-semibold text-ink-primary"
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex min-h-12 items-center gap-3 rounded-control px-3 text-body font-semibold",
+                  active
+                    ? "bg-accent-weak text-accent-ink"
+                    : "text-ink-primary hover:bg-surface-hover",
+                )}
               >
                 <item.icon
-                  className="size-5 text-ink-secondary"
+                  className={cn(
+                    "size-5",
+                    active ? "text-accent-ink" : "text-ink-secondary",
+                  )}
                   aria-hidden="true"
                 />
                 {item.label}
               </NavLink>
             </li>
-          ))}
-          <li className="mt-1 border-t border-border-subtle pt-1">
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="flex min-h-12 w-full items-center rounded-raised px-2 text-left text-body font-semibold text-state-atrasada"
-            >
-              Sair da conta
-            </button>
-          </li>
-        </ul>
+          );
+        })}
+      </ul>
+      <div className="mt-5 border-t border-border-subtle pt-4">
+        <p className="mb-2 text-label font-semibold text-ink-secondary">Tema</p>
+        <ThemeToggle />
       </div>
-    </div>
+      <button
+        type="button"
+        onClick={() => {
+          onClose();
+          void logout().then(() => navigate("/entrar", { replace: true }));
+        }}
+        className="mt-4 -mx-2 flex min-h-12 w-[calc(100%+1rem)] items-center gap-3 rounded-control px-3 text-left text-body font-semibold text-danger hover:bg-danger-weak"
+      >
+        <LogOut className="size-5" aria-hidden="true" />
+        Sair da conta
+      </button>
+    </Overlay>
   );
-}
-
-/** Barra de comando do desktop, anunciada com o atalho que ela responde. */
-export function CommandTrigger({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="hidden h-10 min-w-64 items-center gap-2 rounded-control border border-border-default bg-surface-base px-3 text-left text-body text-ink-tertiary transition-colors hover:border-ink-tertiary md:flex"
-    >
-      <Search className="size-4 shrink-0" aria-hidden="true" />
-      <span className="flex-1 truncate">Buscar paciente, médico ou ação</span>
-      <Kbd>{MOD_KEY === "⌘" ? "⌘K" : "Ctrl K"}</Kbd>
-    </button>
-  );
-}
-
-function initials(name?: string): string {
-  if (!name) return "—";
-  const parts = name.trim().split(/\s+/);
-  return ((parts[0]?.[0] ?? "") + (parts.at(-1)?.[0] ?? "")).toUpperCase();
 }

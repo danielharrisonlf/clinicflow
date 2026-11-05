@@ -38,6 +38,9 @@ playwright-report/
 .DS_Store
 Thumbs.db
 
+# Arquivos enviados no driver local de armazenamento (dados, não código)
+apps/api/storage/
+
 # Biome cache
 .biome/
 
