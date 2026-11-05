@@ -1,0 +1,1095 @@
+<title>ClinicFlow Cockpit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky glass header → vitals strip → day heat strip → 5-stage live board + Copilot rail.
+   Tokens are RGB triplets so Tailwind can apply alpha (bg-ok/10, border-fg/[0.08]). */
+:root {
+  --bg: 251 251 253;      /* off-white editorial */
+  --surface: 255 255 255;
+  --sunken: 244 244 247;
+  --fg: 17 17 22;
+  --muted: 92 92 106;
+  --faint: 140 140 155;
+  --ok: 5 150 105;        /* esmeralda: fluxo positivo, receita */
+  --ai: 79 70 229;        /* índigo: Copilot, inteligência */
+  --warn: 180 83 9;       /* âmbar: atenção, atraso */
+  --bad: 225 29 72;       /* carmim: desistência, estouro */
+  --font-ui: "Geist", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-data: "Geist Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: 9 9 11; --surface: 18 18 21; --sunken: 14 14 17; --fg: 244 244 246;
+    --muted: 161 161 170; --faint: 113 113 122;
+    --ok: 16 185 129; --ai: 129 140 248; --warn: 251 191 36; --bad: 251 113 133;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: 9 9 11; --surface: 18 18 21; --sunken: 14 14 17; --fg: 244 244 246;
+  --muted: 161 161 170; --faint: 113 113 122;
+  --ok: 16 185 129; --ai: 129 140 248; --warn: 251 191 36; --bad: 251 113 133;
+  color-scheme: dark;
+}
+html, body { background: rgb(var(--bg)); color: rgb(var(--fg)); }
+body { font-family: var(--font-ui); font-size: 14px; -webkit-font-smoothing: antialiased; }
+.tnum { font-variant-numeric: tabular-nums; }
+@keyframes enter { from { opacity: 0; transform: translateY(4px) scale(.99); } to { opacity: 1; transform: none; } }
+@keyframes flash { 0% { background: rgb(var(--ok) / .16); } 100% { background: transparent; } }
+@keyframes pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.anim-enter { animation: enter .28s cubic-bezier(.2,.8,.2,1) both; }
+.anim-flash { animation: flash 1.6s ease-out both; }
+.anim-pop { animation: pop .22s cubic-bezier(.2,.8,.2,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .anim-enter, .anim-flash, .anim-pop, .animate-ping, .animate-pulse { animation: none !important; }
+  * { transition: none !important; }
+}
+#boot { padding: 48px 16px; color: rgb(var(--muted)); font: 14px/1.5 var(--font-ui); }
+</style>
+
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg: "rgb(var(--bg) / <alpha-value>)",
+          surface: "rgb(var(--surface) / <alpha-value>)",
+          sunken: "rgb(var(--sunken) / <alpha-value>)",
+          fg: "rgb(var(--fg) / <alpha-value>)",
+          muted: "rgb(var(--muted) / <alpha-value>)",
+          faint: "rgb(var(--faint) / <alpha-value>)",
+          ok: "rgb(var(--ok) / <alpha-value>)",
+          ai: "rgb(var(--ai) / <alpha-value>)",
+          warn: "rgb(var(--warn) / <alpha-value>)",
+          bad: "rgb(var(--bad) / <alpha-value>)",
+        },
+        fontFamily: {
+          sans: ["Geist", "ui-sans-serif", "system-ui", "Segoe UI", "sans-serif"],
+          mono: ['"Geist Mono"', "ui-monospace", "SFMono-Regular", "Consolas", "monospace"],
+        },
+      },
+    },
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script>window.react = window.React;</script>
+<script src="https://unpkg.com/lucide-react@0.454.0/dist/umd/lucide-react.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+
+<div id="root"><div id="boot">Carregando o cockpit da clínica…</div></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* ───────────────────────── helpers ───────────────────────── */
+const Icon = ({ n, size = 16, className = "", sw = 1.75 }) => {
+  const C = window.LucideReact && window.LucideReact[n];
+  return C
+    ? <C size={size} strokeWidth={sw} className={className} aria-hidden="true" />
+    : <span aria-hidden="true" className={"inline-block shrink-0 " + className} style={{ width: size, height: size }} />;
+};
+const pad = (n) => String(n).padStart(2, "0");
+const T = (h, m, s = 0) => h * 3600 + m * 60 + s;
+const hm = (s) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}`;
+const hms = (s) => `${hm(s)}:${pad(Math.floor(s % 60))}`;
+const mmss = (s) => { s = Math.max(0, Math.floor(s)); return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; };
+const brl = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
+const first = (name) => name.split(" ")[0];
+const initials = (name) => name.split(" ").filter((w) => w.length > 2).slice(0, 2).map((w) => w[0]).join("");
+const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const cx = (...a) => a.filter(Boolean).join(" ");
+
+/* ───────────────────────── mock: Clínica Vértice ───────────────────────── */
+const CLINIC = "Clínica Vértice";
+const BASE_DATE = new Date(2026, 9, 9);
+const START = T(10, 42, 0);
+const TOLERANCE = 15 * 60;
+
+const DOCS = {
+  helena: { name: "Dra. Helena Prado", short: "Dra. Helena", spec: "Dermatologia", room: "Sala 1", color: "#8B5CF6" },
+  ramos: { name: "Dr. Rafael Ramos", short: "Dr. Ramos", spec: "Ortopedia", room: "Sala 2", color: "#0EA5E9" },
+  okada: { name: "Dra. Beatriz Okada", short: "Dra. Okada", spec: "Cardiologia", room: "Sala 3", color: "#EC4899" },
+  menezes: { name: "Dr. Thiago Menezes", short: "Dr. Menezes", spec: "Endocrinologia", room: "Sala 4", color: "#14B8A6" },
+};
+
+const conv = (label) => ({ kind: "conv", label });
+const part = (value) => ({ kind: "part", label: "Particular", value });
+
+const INITIAL = [
+  // A chegar — confirmados pelo Copilot no WhatsApp
+  { id: "p01", name: "Carlos Eduardo Lima", doc: "ramos", time: T(11, 15), type: "Retorno", payer: conv("Bradesco Saúde"), stage: "arriving", confirmedAt: T(7, 58), eta: "a caminho · ~10 min" },
+  { id: "p02", name: "Pedro Henrique Sá", doc: "menezes", time: T(11, 15), type: "Consulta", payer: conv("SulAmérica"), stage: "arriving", confirmedAt: T(8, 40) },
+  { id: "p03", name: "Ana Ribeiro", doc: "helena", time: T(11, 30), type: "Consulta", payer: conv("Unimed"), stage: "arriving", confirmedAt: T(8, 14) },
+  { id: "p04", name: "Juliana Furtado", doc: "okada", time: T(11, 30), type: "Primeira consulta", payer: part(450), stage: "arriving", confirmedAt: T(9, 12) },
+  { id: "p05", name: "Mariana Costa", doc: "ramos", time: T(14, 0), type: "Avaliação", payer: part(400), stage: "arriving", confirmedAt: T(9, 52), smartFill: T(9, 52) },
+  // Na recepção
+  { id: "p06", name: "Lúcia Andrade", doc: "helena", time: T(11, 10), type: "Consulta", payer: conv("Unimed"), stage: "reception", checkedInAt: T(10, 38), intake: { ok: true, text: "Carteirinha validada · termo assinado" } },
+  { id: "p07", name: "Roberto Nogueira", doc: "okada", time: T(11, 0), type: "Retorno", payer: conv("Amil"), stage: "reception", checkedInAt: T(10, 41), intake: { ok: false, text: "Guia TISS aguardando autorização" } },
+  // Em espera
+  { id: "p08", name: "Fernanda Moura", doc: "ramos", time: T(10, 15), type: "Retorno", payer: conv("Bradesco Saúde"), stage: "waiting", waitingSince: T(10, 22) },
+  { id: "p09", name: "Gustavo Teixeira", doc: "menezes", time: T(10, 45), type: "Primeira consulta", payer: part(520), stage: "waiting", waitingSince: T(10, 31) },
+  { id: "p10", name: "Sônia Valente", doc: "helena", time: T(10, 50), type: "Consulta", payer: conv("Unimed"), stage: "waiting", waitingSince: T(10, 37) },
+  // Em atendimento
+  { id: "p11", name: "Isabela Rocha", doc: "ramos", time: T(10, 0), type: "Avaliação · joelho", payer: conv("Porto Saúde"), stage: "consult", startedAt: T(10, 4), planned: 30 },
+  { id: "p12", name: "Marcos Aurélio Pinto", doc: "okada", time: T(10, 20), type: "Retorno · ECG", payer: conv("Unimed"), stage: "consult", startedAt: T(10, 20), planned: 30 },
+  { id: "p13", name: "Camila Duarte", doc: "helena", time: T(10, 30), type: "Biópsia de pele", payer: part(680), stage: "consult", startedAt: T(10, 35), planned: 40 },
+  // Finalizados & retornos
+  { id: "p14", name: "Patrícia Gomes", doc: "helena", time: T(9, 0), type: "Consulta", payer: conv("Unimed"), stage: "done", finishedAt: T(9, 24), followUp: { kind: "pending", text: "Retorno em 30 dias" } },
+  { id: "p15", name: "João Vitor Campos", doc: "ramos", time: T(9, 30), type: "Retorno", payer: part(400), stage: "done", finishedAt: T(9, 58), followUp: { kind: "scheduled", text: "Retorno 06/11 · 09:30" } },
+  { id: "p16", name: "Renata Saldanha", doc: "okada", time: T(9, 40), type: "Consulta", payer: conv("SulAmérica"), stage: "done", finishedAt: T(10, 12), followUp: { kind: "exam", text: "Holter 24h solicitado · retorno após laudo" } },
+  { id: "p17", name: "Henrique Bastos", doc: "menezes", time: T(10, 0), type: "Retorno", payer: conv("Unimed"), stage: "done", finishedAt: T(10, 27), followUp: { kind: "pending", text: "Retorno em 90 dias · HbA1c" } },
+];
+
+const INITIAL_ACTIVITY = [
+  { t: T(10, 41), tone: "fg", icon: "ScanLine", text: "Roberto Nogueira fez check-in no totem. Guia TISS pendente." },
+  { t: T(10, 39), tone: "bad", icon: "CalendarX2", text: "Cláudia Reis desmarcou 15:30 com a Dra. Okada pelo WhatsApp. Smart Fill iniciado." },
+  { t: T(10, 38), tone: "fg", icon: "ScanLine", text: "Lúcia Andrade fez check-in no balcão." },
+  { t: T(10, 30), tone: "ai", icon: "MessageCircle", text: "Copilot avisou 3 pacientes da tarde do Dr. Ramos sobre atraso previsto de 10 min." },
+  { t: T(9, 52), tone: "ok", icon: "Zap", text: "Vaga 14:00 do Dr. Ramos preenchida em 6 min por Mariana Costa (lista de espera)." },
+  { t: T(8, 14), tone: "ai", icon: "CheckCheck", text: "Copilot confirmou 31 de 34 consultas de hoje. 3 remarcadas sem ligação." },
+];
+
+// Ocupação por meia hora, 07:00–19:00 (24 faixas).
+const HEAT = [0.5, 0.75, 1, 1, 1, 0.75, 1, 1, 1, 1, 0.75, 0.5, 0.25, 0.5, 1, 1, 1, 0.75, 1, 1, 0.75, 1, 0.5, 0.25];
+const FREED_BUCKET = 17; // 15:30
+
+const STAGES = [
+  { id: "arriving", title: "A chegar", sub: "Confirmados pelo Copilot", tone: "ai" },
+  { id: "reception", title: "Na recepção", sub: "Check-in recente", tone: "fg" },
+  { id: "waiting", title: "Em espera", sub: "Tolerância de 15 min", tone: "warn" },
+  { id: "consult", title: "Em atendimento", sub: "Tempo decorrido", tone: "ok", live: true },
+  { id: "done", title: "Finalizados", sub: "Retornos a agendar", tone: "muted" },
+];
+const STAGE_LABEL = Object.fromEntries(STAGES.map((s) => [s.id, s.title]));
+
+const RESCHEDULE_SLOTS = [
+  { id: "s1", label: "Hoje, 16:00", hint: "mesmo profissional · horário livre" },
+  { id: "s2", label: "Seg, 12/10 · 09:30", hint: "preferência de manhã do paciente" },
+  { id: "s3", label: "Ter, 13/10 · 14:15", hint: "primeiro horário com convênio liberado" },
+];
+
+/* ───────────────────────── small UI atoms ───────────────────────── */
+const DOT = { ai: "bg-ai", ok: "bg-ok", warn: "bg-warn", bad: "bg-bad", fg: "bg-fg/70", muted: "bg-faint" };
+const TEXT = { ai: "text-ai", ok: "text-ok", warn: "text-warn", bad: "text-bad", fg: "text-fg", muted: "text-muted" };
+
+function Pulse({ tone = "ok", live = true }) {
+  return (
+    <span className="relative flex h-2 w-2 shrink-0">
+      {live && <span className={cx("absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping", DOT[tone])} />}
+      <span className={cx("relative inline-flex h-2 w-2 rounded-full", DOT[tone])} />
+    </span>
+  );
+}
+
+function Kbd({ children, className = "" }) {
+  return (
+    <kbd className={cx("inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] border border-fg/[0.12] bg-surface px-1 font-mono text-[11px] font-medium leading-none text-muted shadow-[0_1px_0_rgb(var(--fg)/0.06)]", className)}>
+      {children}
+    </kbd>
+  );
+}
+
+function DocTag({ id }) {
+  const d = DOCS[id];
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: d.color }} />
+      <span className="truncate">{d.short}</span>
+    </span>
+  );
+}
+
+function Avatar({ name, size = 32 }) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center rounded-full border border-fg/[0.08] bg-sunken text-[11px] font-semibold tracking-wide text-fg/80"
+      style={{ width: size, height: size }}
+      aria-hidden="true"
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+function Payer({ payer }) {
+  return payer.kind === "part"
+    ? <span className="text-[12px] text-muted">Particular · <span className="font-mono tnum text-fg/80">{brl(payer.value)}</span></span>
+    : <span className="text-[12px] text-muted">{payer.label}</span>;
+}
+
+function Chip({ tone = "muted", icon, children, className = "" }) {
+  const map = {
+    ai: "bg-ai/[0.08] text-ai border-ai/20",
+    ok: "bg-ok/[0.08] text-ok border-ok/20",
+    warn: "bg-warn/[0.08] text-warn border-warn/25",
+    bad: "bg-bad/[0.08] text-bad border-bad/25",
+    muted: "bg-sunken text-muted border-fg/[0.08]",
+  };
+  return (
+    <span className={cx("inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-[3px] text-[12px] font-medium leading-none", map[tone], className)}>
+      {icon && <Icon n={icon} size={12} sw={2} />}
+      <span className="truncate">{children}</span>
+    </span>
+  );
+}
+
+function Meter({ value, tone = "ok" }) {
+  return (
+    <div className="h-1 w-full overflow-hidden rounded-full bg-fg/[0.06]" role="presentation">
+      <div className={cx("h-full rounded-full transition-[width] duration-700 ease-out", DOT[tone])} style={{ width: `${Math.min(100, Math.max(2, value * 100))}%` }} />
+    </div>
+  );
+}
+
+/* ───────────────────────── patient card ───────────────────────── */
+function cardActions(p) {
+  switch (p.stage) {
+    case "arriving": return [{ k: "c", label: "Check-in", icon: "LogIn" }, { k: "r", label: "Reagendar", icon: "CalendarClock" }];
+    case "reception": return [{ k: "e", label: "Liberar p/ espera", icon: "Armchair" }, { k: "r", label: "Reagendar", icon: "CalendarClock" }];
+    case "waiting": return [{ k: "n", label: "Notificar sala", icon: "BellRing" }, { k: "r", label: "Reagendar", icon: "CalendarClock" }];
+    case "consult": return [{ k: "f", label: "Finalizar", icon: "CircleCheck" }];
+    case "done": return p.followUp && p.followUp.kind !== "scheduled" ? [{ k: "a", label: "Agendar retorno", icon: "CalendarPlus" }] : [];
+    default: return [];
+  }
+}
+
+function PatientCard({ p, now, selected, onSelect, onAction, docBusy }) {
+  const actions = cardActions(p);
+  let body = null;
+
+  if (p.stage === "arriving") {
+    body = p.smartFill
+      ? <Chip tone="ai" icon="Zap">Smart Waitlist · vaga preenchida {hm(p.smartFill)}</Chip>
+      : <div className="flex flex-wrap items-center gap-1.5">
+          <Chip tone="ai" icon="MessageCircle">WhatsApp · confirmou {hm(p.confirmedAt)}</Chip>
+          {p.eta && <span className="text-[12px] text-muted">{p.eta}</span>}
+        </div>;
+  }
+
+  if (p.stage === "reception") {
+    const ago = Math.max(0, Math.floor((now - p.checkedInAt) / 60));
+    body = (
+      <div className="flex flex-col gap-1.5">
+        <Chip tone={p.intake.ok ? "ok" : "warn"} icon={p.intake.ok ? "ShieldCheck" : "FileWarning"}>{p.intake.text}</Chip>
+        <span className="font-mono text-[12px] text-muted tnum">check-in {hm(p.checkedInAt)} · há {ago} min</span>
+      </div>
+    );
+  }
+
+  if (p.stage === "waiting") {
+    const waited = now - p.waitingSince;
+    const ratio = waited / TOLERANCE;
+    const tone = ratio >= 1 ? "bad" : ratio >= 0.75 ? "warn" : "ok";
+    const busy = docBusy[p.doc];
+    body = (
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className={cx("font-mono text-[22px] font-medium leading-none tracking-tight tnum", TEXT[tone])} aria-label={`Esperando há ${Math.floor(waited / 60)} minutos`}>
+            {mmss(waited)}
+          </span>
+          <span className="whitespace-nowrap font-mono text-[12px] text-muted tnum">limite 15:00</span>
+        </div>
+        <Meter value={ratio} tone={tone} />
+        <div className="flex flex-wrap items-center gap-1.5">
+          {ratio >= 1 && <Chip tone="bad" icon="TriangleAlert">+{Math.floor((waited - TOLERANCE) / 60)} min além</Chip>}
+          {p.notifiedAt && <Chip tone="ai" icon="BellRing">sala avisada {hm(p.notifiedAt)}</Chip>}
+          {busy && busy.over > 0 && <span className="text-[12px] text-muted">{DOCS[p.doc].short} +{busy.over} min</span>}
+          {!busy && <span className="text-[12px] text-ok">{DOCS[p.doc].room} livre</span>}
+        </div>
+      </div>
+    );
+  }
+
+  if (p.stage === "consult") {
+    const el = now - p.startedAt;
+    const ratio = el / (p.planned * 60);
+    const over = Math.floor(el / 60) - p.planned;
+    body = (
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="font-mono text-[22px] font-medium leading-none tracking-tight tnum">{mmss(el)}</span>
+          <span className="whitespace-nowrap font-mono text-[12px] text-muted tnum">/ {p.planned}:00 · {DOCS[p.doc].room.replace("Sala ", "S")}</span>
+        </div>
+        <Meter value={ratio} tone={ratio > 1 ? "warn" : "ok"} />
+        {over > 0 && <Chip tone="warn" icon="Hourglass">{over} min acima do previsto</Chip>}
+      </div>
+    );
+  }
+
+  if (p.stage === "done") {
+    const f = p.followUp;
+    const map = { pending: ["warn", "CalendarPlus"], exam: ["muted", "FlaskConical"], scheduled: ["ok", "CalendarCheck"] };
+    const [tone, icon] = map[f.kind];
+    body = (
+      <div className="flex flex-col gap-1.5">
+        <Chip tone={tone} icon={icon}>{f.kind === "pending" ? `${f.text} · a agendar` : f.text}</Chip>
+        <span className="font-mono text-[12px] text-muted tnum">finalizado {hm(p.finishedAt)}</span>
+      </div>
+    );
+  }
+
+  return (
+    <li
+      data-pid={p.id}
+      tabIndex={0}
+      aria-current={selected ? "true" : undefined}
+      aria-label={`${p.name}, ${hm(p.time)}, ${DOCS[p.doc].name}, ${STAGE_LABEL[p.stage]}`}
+      onClick={() => onSelect(p.id)}
+      onFocus={() => onSelect(p.id)}
+      className={cx(
+        "anim-enter group relative flex cursor-default flex-col gap-2.5 rounded-xl border bg-surface p-3 outline-none transition-[box-shadow,border-color] duration-150",
+        "shadow-[0_1px_2px_rgb(var(--fg)/0.04)] hover:border-fg/[0.14]",
+        selected ? "border-ai/50 ring-[3px] ring-ai/15" : "border-fg/[0.08] focus-visible:border-ai/50 focus-visible:ring-[3px] focus-visible:ring-ai/15"
+      )}
+    >
+      <div className="flex items-start gap-2.5">
+        <Avatar name={p.name} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-[14px] font-medium leading-tight">{p.name}</span>
+            <span className="shrink-0 font-mono text-[12px] text-muted tnum">{hm(p.time)}</span>
+          </div>
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <span className="min-w-0 truncate"><Payer payer={p.payer} /></span>
+            <DocTag id={p.doc} />
+          </div>
+          <span className="truncate text-[12px] text-faint">{p.type}</span>
+        </div>
+      </div>
+      {body}
+      {actions.length > 0 && (
+        <div className={cx(
+          "flex flex-wrap gap-1.5 transition-opacity duration-150",
+          selected ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
+        )}>
+          {actions.map((a, i) => (
+            <button
+              key={a.k}
+              type="button"
+              tabIndex={selected ? 0 : -1}
+              onClick={(e) => { e.stopPropagation(); onAction(p.id, a.k); }}
+              className={cx(
+                "inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+                i === 0 ? "border-fg/90 bg-fg text-bg hover:bg-fg/85" : "border-fg/[0.1] bg-surface text-fg/80 hover:bg-sunken"
+              )}
+            >
+              <Kbd className={i === 0 ? "border-bg/20 bg-bg/10 text-bg/80 shadow-none" : ""}>{a.k.toUpperCase()}</Kbd>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </li>
+  );
+}
+
+/* ───────────────────────── header & vitals ───────────────────────── */
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => {
+    const t = document.documentElement.dataset.theme;
+    return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+  const toggle = () => { const next = !dark; document.documentElement.dataset.theme = next ? "dark" : "light"; setDark(next); };
+  useEffect(() => { window.__toggleTheme = toggle; });
+  return (
+    <button type="button" onClick={toggle} aria-label={dark ? "Usar tema claro" : "Usar tema escuro"}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-fg/[0.08] text-muted transition-colors hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">
+      <Icon n={dark ? "Sun" : "Moon"} size={15} />
+    </button>
+  );
+}
+
+function Header({ now, dayOffset, setDayOffset, weather, onOpenPalette, onNavigate }) {
+  const date = new Date(BASE_DATE); date.setDate(date.getDate() + dayOffset);
+  const label = date.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  const nav = [
+    { id: "cockpit", label: "Cockpit", icon: "LayoutGrid", active: true },
+    { id: "agenda", label: "Agenda", icon: "CalendarDays" },
+    { id: "comms", label: "Comms", icon: "MessagesSquare", badge: 2 },
+    { id: "pacientes", label: "Pacientes", icon: "UsersRound" },
+  ];
+  const W = { ok: ["CloudSun", "Fluxo estável"], warn: ["Cloud", "Atenção"], bad: ["CloudRain", "Fluxo pressionado"] }[weather.level];
+  return (
+    <header className="sticky z-30 border-b border-fg/[0.08] bg-bg/80 backdrop-blur-xl" style={{ top: "env(safe-area-inset-top, 0px)" }}>
+      <div className="mx-auto flex h-14 max-w-[1680px] items-center gap-3 px-4 sm:px-6">
+        <div className="flex items-center gap-2">
+          <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-fg text-bg">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 12h4l2-5 4 10 2-5h6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight">ClinicFlow</span>
+          <span className="hidden text-[13px] text-faint lg:inline">/ {CLINIC}</span>
+        </div>
+        <nav className="ml-3 hidden items-center gap-0.5 md:flex" aria-label="Principal">
+          {nav.map((n) => (
+            <button key={n.id} type="button" onClick={() => !n.active && onNavigate(n.label)} aria-current={n.active ? "page" : undefined}
+              className={cx("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40",
+                n.active ? "bg-sunken text-fg" : "text-muted hover:bg-sunken/70 hover:text-fg")}>
+              <Icon n={n.icon} size={14} />{n.label}
+              {n.badge && <span className="ml-0.5 rounded-full bg-ai/10 px-1.5 font-mono text-[11px] text-ai tnum">{n.badge}</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="flex-1" />
+        <button type="button" onClick={onOpenPalette}
+          className="inline-flex h-8 min-w-0 items-center gap-2 rounded-lg border border-fg/[0.08] bg-surface pl-2.5 pr-1.5 text-[13px] text-muted shadow-[0_1px_2px_rgb(var(--fg)/0.04)] transition-colors hover:border-fg/[0.16] hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40 sm:w-64">
+          <Icon n="Search" size={14} />
+          <span className="hidden flex-1 truncate text-left sm:inline">Buscar paciente ou ação</span>
+          <span className="hidden items-center gap-0.5 sm:inline-flex"><Kbd>Ctrl</Kbd><Kbd>K</Kbd></span>
+        </button>
+        <ThemeToggle />
+        <span className="hidden items-center gap-2 border-l border-fg/[0.08] pl-3 sm:inline-flex">
+          <Avatar name="Carla Mendes" size={28} />
+          <span className="hidden flex-col leading-tight xl:flex"><span className="text-[13px] font-medium">Carla Mendes</span><span className="text-[11px] text-faint">Recepção · balcão 1</span></span>
+        </span>
+      </div>
+
+      <div className="mx-auto flex max-w-[1680px] flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-3 sm:px-6">
+        <div className="inline-flex items-center rounded-lg border border-fg/[0.08] bg-surface">
+          <button type="button" aria-label="Dia anterior" onClick={() => setDayOffset(dayOffset - 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-l-lg text-muted hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40"><Icon n="ChevronLeft" size={15} /></button>
+          <span className="min-w-[13.5rem] px-2 text-center text-[13px] font-medium first-letter:uppercase">{label}</span>
+          <button type="button" aria-label="Próximo dia" onClick={() => setDayOffset(dayOffset + 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-r-lg text-muted hover:bg-sunken hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40"><Icon n="ChevronRight" size={15} /></button>
+        </div>
+        {dayOffset !== 0 && (
+          <button type="button" onClick={() => setDayOffset(0)} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-ai hover:bg-ai/[0.08]">
+            <Icon n="Undo2" size={14} />Voltar para hoje
+          </button>
+        )}
+        <span className="inline-flex items-center gap-2 font-mono text-[13px] text-muted tnum" aria-live="off">
+          <Pulse tone="ok" />ao vivo · {hms(now)}
+        </span>
+        <span className={cx("inline-flex items-center gap-2 rounded-lg border px-2.5 py-1 text-[13px]",
+          weather.level === "ok" ? "border-ok/20 bg-ok/[0.06]" : weather.level === "warn" ? "border-warn/25 bg-warn/[0.06]" : "border-bad/25 bg-bad/[0.06]")}>
+          <Icon n={W[0]} size={15} className={TEXT[weather.level]} />
+          <span className="text-faint">Clima operacional</span>
+          <span className={cx("font-medium", TEXT[weather.level])}>{W[1]}</span>
+          {weather.detail && <span className="hidden text-muted md:inline">· {weather.detail}</span>}
+        </span>
+      </div>
+    </header>
+  );
+}
+
+function Vital({ icon, label, value, unit, sub, tone, flashKey }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5 bg-surface p-4 sm:p-5">
+      <div className="flex items-center gap-2 text-[12px] font-medium text-muted"><Icon n={icon} size={14} />{label}</div>
+      <div key={flashKey} className={cx("-mx-1 self-start rounded-md px-1 font-mono text-[30px] font-medium leading-none tracking-tight tnum", flashKey ? "anim-flash" : "", tone ? TEXT[tone] : "")}>
+        {value}{unit && <span className="ml-0.5 text-[18px] text-muted">{unit}</span>}
+      </div>
+      <div className="text-[12px] leading-snug text-muted">{sub}</div>
+    </div>
+  );
+}
+
+function Vitals({ kpi, waiting, now }) {
+  const longest = waiting.reduce((m, p) => Math.max(m, now - p.waitingSince), 0);
+  return (
+    <section aria-label="Sinais vitais de hoje" className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-fg/[0.08] bg-fg/[0.08] shadow-[0_1px_2px_rgb(var(--fg)/0.04)] lg:grid-cols-4">
+      <Vital icon="Gauge" label="Ocupação" value={Math.round((kpi.filled / kpi.total) * 100)} unit="%" flashKey={kpi.filled > 47 ? kpi.filled : 0}
+        sub={<><span className="font-mono tnum">{kpi.filled}</span> de <span className="font-mono tnum">{kpi.total}</span> horários · {kpi.total - kpi.filled} livres à tarde</>} />
+      <Vital icon="ShieldCheck" label="No-shows prevenidos" value={kpi.saved} tone="ai" flashKey={kpi.saved > 4 ? kpi.saved : 0}
+        sub="remarcados ou vagas repostas pelo Copilot" />
+      <Vital icon="Wallet" label="Receita salva estimada" value={brl(kpi.revenue)} tone="ok" flashKey={kpi.revenue > 3200 ? kpi.revenue : 0}
+        sub="hoje, por ticket médio de cada vaga recuperada" />
+      <Vital icon="Timer" label="Espera média" value={kpi.avgWait} unit=" min"
+        sub={waiting.length ? <>agora <span className="font-mono tnum">{waiting.length}</span> na espera · maior <span className="font-mono tnum">{Math.floor(longest / 60)} min</span></> : "ninguém esperando agora"} />
+    </section>
+  );
+}
+
+function DayStrip({ now, filledFreed }) {
+  const startDay = T(7, 0), span = 12 * 3600;
+  const nowPct = Math.min(100, Math.max(0, ((now - startDay) / span) * 100));
+  const nowBucket = Math.floor((now - startDay) / 1800);
+  return (
+    <section aria-label="Ocupação do dia por meia hora" className="rounded-2xl border border-fg/[0.08] bg-surface px-4 pb-3 pt-3.5 sm:px-5">
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[12px] font-medium text-muted">Ocupação do dia</span>
+        <span className="flex items-center gap-3 text-[12px] text-muted">
+          <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-ok" />cheio</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-ok/35" />parcial</span>
+          <span className="inline-flex items-center gap-1.5"><span className={cx("h-2 w-2 rounded-sm", filledFreed ? "bg-ok" : "border border-bad bg-bad/20")} />15:30 {filledFreed ? "reposta" : "aberta"}</span>
+        </span>
+      </div>
+      <div className="relative">
+        <div className="flex h-9 items-end gap-[3px]">
+          {HEAT.map((v, i) => {
+            const freed = i === FREED_BUCKET;
+            const val = freed && filledFreed ? 1 : v;
+            const past = i < nowBucket;
+            const label = `${hm(startDay + i * 1800)} · ${Math.round(val * 100)}% ocupado`;
+            return (
+              <div key={i} title={label} className="flex h-full flex-1 items-end">
+                <div
+                  className={cx("w-full rounded-[3px] transition-all duration-700",
+                    freed && !filledFreed ? "border border-bad/70 bg-bad/15" : val >= 1 ? "bg-ok" : "bg-ok/35",
+                    past ? "opacity-40" : "")}
+                  style={{ height: `${Math.max(14, val * 100)}%` }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div className="pointer-events-none absolute -bottom-1 -top-1 w-px bg-fg" style={{ left: `${nowPct}%` }}>
+          <span className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-fg ring-2 ring-surface" />
+        </div>
+      </div>
+      <div className="mt-1.5 flex justify-between font-mono text-[11px] text-faint tnum">
+        {["07", "09", "11", "13", "15", "17", "19"].map((h) => <span key={h}>{h}h</span>)}
+      </div>
+    </section>
+  );
+}
+
+/* ───────────────────────── board ───────────────────────── */
+function Column({ stage, list, ...cardProps }) {
+  return (
+    <section aria-labelledby={`col-${stage.id}`} className="flex min-w-0 flex-col rounded-2xl border border-fg/[0.06] bg-sunken/60">
+      <header className="flex flex-col gap-0.5 px-3 pb-2.5 pt-3">
+        <div className="flex items-center gap-2">
+          {stage.live ? <Pulse tone={stage.tone} /> : <span className={cx("h-2 w-2 shrink-0 rounded-full", DOT[stage.tone])} />}
+          <h2 id={`col-${stage.id}`} className="whitespace-nowrap text-[13px] font-semibold">{stage.title}</h2>
+          <span className="ml-auto font-mono text-[12px] text-muted tnum">{list.length}</span>
+        </div>
+        <span className="truncate pl-4 text-[12px] text-faint">{stage.sub}</span>
+      </header>
+      <ul className="flex min-h-[140px] flex-col gap-2 px-2 pb-2">
+        {list.length === 0 && (
+          <li className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-fg/[0.1] px-3 py-6 text-center text-[12px] text-faint">Ninguém nesta etapa agora</li>
+        )}
+        {list.map((p) => <PatientCard key={p.id + p.stage} p={p} {...cardProps} selected={cardProps.selectedId === p.id} />)}
+      </ul>
+    </section>
+  );
+}
+
+/* ───────────────────────── Copilot rail ───────────────────────── */
+function SmartFillCard({ sf, now, onOpenComms }) {
+  const elapsed = (sf.filledAt || now) - sf.openedAt;
+  const target = 8 * 60;
+  const done = sf.status === "filled";
+  const CAND = { lido: ["Lida", "muted"], digitando: ["Respondendo…", "ai"], aceitou: ["Aceitou 15:30", "ok"], enviado: ["Enviada", "muted"], fila: ["Na fila", "muted"], cancelado: ["Dispensada", "muted"] };
+  return (
+    <section aria-label="Smart Fill" className={cx("relative overflow-hidden rounded-2xl border bg-surface p-4 transition-shadow duration-700",
+      done ? "border-ok/30 shadow-[0_24px_60px_-28px_rgb(var(--ok)/0.55)]" : "border-ai/25 shadow-[0_24px_60px_-28px_rgb(var(--ai)/0.55)]")}>
+      <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full blur-3xl" style={{ background: done ? "rgb(var(--ok) / .14)" : "rgb(var(--ai) / .16)" }} />
+      <div className="relative flex items-center gap-2">
+        <span className={cx("inline-flex h-6 w-6 items-center justify-center rounded-md", done ? "bg-ok/10 text-ok" : "bg-ai/10 text-ai")}><Icon n="Zap" size={14} sw={2} /></span>
+        <h2 className="text-[13px] font-semibold">Smart Fill</h2>
+        <span className={cx("ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium", done ? "text-ok" : "text-ai")}>
+          {!done && <Pulse tone="ai" />}{done ? "Vaga reposta" : "Em andamento"}
+        </span>
+      </div>
+      <p className="relative mt-3 text-[13px] leading-snug">
+        <span className="font-mono tnum">15:30</span> · {DOCS.okada.name}
+        <span className="block text-[12px] text-muted">Cláudia Reis desmarcou às {hm(sf.openedAt)} pelo WhatsApp</span>
+      </p>
+      <div className="relative mt-3 flex items-baseline justify-between">
+        <span className={cx("font-mono text-[26px] font-medium leading-none tracking-tight tnum", done ? "text-ok" : "")}>{mmss(elapsed)}</span>
+        <span className="font-mono text-[12px] text-muted tnum">meta 08:00</span>
+      </div>
+      <div className="relative mt-2"><Meter value={elapsed / target} tone={done ? "ok" : "ai"} /></div>
+      <ol className="relative mt-3 flex flex-col divide-y divide-fg/[0.06]">
+        {sf.candidates.map((c, i) => {
+          const [lab, tone] = CAND[c.status];
+          return (
+            <li key={c.name} className="flex items-center gap-2.5 py-2">
+              <span className="w-4 font-mono text-[12px] text-faint tnum">{i + 1}</span>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[13px] font-medium">{c.name}</span>
+                <span className="truncate text-[12px] text-muted">{c.reason}</span>
+              </div>
+              <span className={cx("shrink-0 text-[12px] font-medium", TEXT[tone])}>{lab}</span>
+            </li>
+          );
+        })}
+      </ol>
+      <button type="button" onClick={onOpenComms} className="relative mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-fg/[0.1] text-[12px] font-medium text-fg/80 hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/40">
+        Ver conversas no Centro de Resgate <Icon n="ArrowUpRight" size={13} />
+      </button>
+    </section>
+  );
+}
+
+function Rooms({ patients, now, onCall }) {
+  return (
+    <section aria-label="Consultórios" className="rounded-2xl border border-fg/[0.08] bg-surface p-4">
+      <div className="mb-2 flex items-center gap-2"><Icon n="DoorOpen" size={15} className="text-muted" /><h2 className="text-[13px] font-semibold">Consultórios</h2></div>
+      <ul className="flex flex-col divide-y divide-fg/[0.06]">
+        {Object.entries(DOCS).map(([id, d]) => {
+          const c = patients.find((p) => p.stage === "consult" && p.doc === id);
+          const next = patients.filter((p) => p.stage === "waiting" && p.doc === id).sort((a, b) => a.waitingSince - b.waitingSince)[0];
+          const el = c ? now - c.startedAt : 0;
+          const over = c ? Math.floor(el / 60) - c.planned : 0;
+          return (
+            <li key={id} className="flex flex-col gap-1.5 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: d.color }} />
+                <span className="text-[13px] font-medium">{d.room}</span>
+                <span className="truncate text-[12px] text-muted">{d.short} · {d.spec}</span>
+                {c
+                  ? <span className={cx("ml-auto font-mono text-[12px] tnum", over > 0 ? "text-warn" : "text-muted")}>{mmss(el)}</span>
+                  : <span className="ml-auto text-[12px] font-medium text-ok">Livre</span>}
+              </div>
+              {c && <div className="flex items-center gap-2 pl-3.5"><span className="truncate text-[12px] text-muted">{c.name}</span><div className="ml-auto w-20"><Meter value={el / (c.planned * 60)} tone={over > 0 ? "warn" : "ok"} /></div></div>}
+              {!c && next && (
+                <button type="button" onClick={() => onCall(next.id)} className="ml-3.5 inline-flex items-center gap-1.5 self-start rounded-lg bg-ok/[0.08] px-2 py-1 text-[12px] font-medium text-ok hover:bg-ok/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/40">
+                  <Icon n="BellRing" size={13} />Chamar {next.name} · espera {Math.floor((now - next.waitingSince) / 60)} min
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function Activity({ items }) {
+  return (
+    <section aria-label="Atividade" className="rounded-2xl border border-fg/[0.08] bg-surface p-4">
+      <div className="mb-2 flex items-center gap-2"><Icon n="Activity" size={15} className="text-muted" /><h2 className="text-[13px] font-semibold">Atividade</h2><span className="ml-auto text-[12px] text-faint">Copilot e recepção</span></div>
+      <ol className="relative flex flex-col">
+        {items.slice(0, 7).map((a, i) => (
+          <li key={a.t + a.text} className={cx("relative flex gap-3 pb-3 last:pb-0", i === 0 ? "anim-enter" : "")}>
+            {i < Math.min(items.length, 7) - 1 && <span className="absolute left-[11px] top-6 h-[calc(100%-18px)] w-px bg-fg/[0.08]" />}
+            <span className={cx("relative mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-fg/[0.08] bg-surface", TEXT[a.tone])}><Icon n={a.icon} size={12} sw={2} /></span>
+            <div className="min-w-0 flex-1">
+              <span className="font-mono text-[11px] text-faint tnum">{hm(a.t)}</span>
+              <p className="text-[12.5px] leading-snug text-fg/85">{a.text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/* ───────────────────────── overlays ───────────────────────── */
+function Overlay({ onClose, children, label, align = "top" }) {
+  return (
+    <div role="dialog" aria-modal="true" aria-label={label} className={cx("fixed inset-0 z-50 flex justify-center bg-black/40 px-4 backdrop-blur-[2px]", align === "top" ? "items-start pt-[12vh]" : "items-center")} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="anim-pop w-full max-w-[560px] overflow-hidden rounded-2xl border border-fg/[0.1] bg-surface shadow-[0_32px_80px_-20px_rgb(0_0_0/0.35)]">{children}</div>
+    </div>
+  );
+}
+
+function CommandPalette({ items, onClose }) {
+  const [q, setQ] = useState("");
+  const [idx, setIdx] = useState(0);
+  const listRef = useRef(null);
+  const filtered = useMemo(() => {
+    const n = norm(q.trim());
+    return n ? items.filter((it) => norm(it.label + " " + (it.hint || "") + " " + it.group).includes(n)) : items;
+  }, [q, items]);
+  useEffect(() => setIdx(0), [q]);
+  useEffect(() => { const el = listRef.current && listRef.current.querySelector(`[data-i="${idx}"]`); el && el.scrollIntoView({ block: "nearest" }); }, [idx]);
+  const run = (it) => { onClose(); it && it.run(); };
+  const onKey = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, filtered.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); run(filtered[idx]); }
+    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+  };
+  let lastGroup = null;
+  return (
+    <Overlay onClose={onClose} label="Busca rápida">
+      <div className="flex items-center gap-2.5 border-b border-fg/[0.08] px-4">
+        <Icon n="Search" size={16} className="text-muted" />
+        <input id="cmdk-input" autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="Paciente, profissional ou ação…" aria-label="Buscar"
+          className="h-12 flex-1 bg-transparent text-[15px] outline-none placeholder:text-faint" />
+        <Kbd>Esc</Kbd>
+      </div>
+      <ul ref={listRef} className="max-h-[52vh] overflow-y-auto p-1.5" role="listbox" aria-label="Resultados">
+        {filtered.length === 0 && <li className="px-3 py-8 text-center text-[13px] text-muted">Nada encontrado para “{q}”.</li>}
+        {filtered.map((it, i) => {
+          const head = it.group !== lastGroup ? (lastGroup = it.group) : null;
+          return (
+            <React.Fragment key={it.id}>
+              {head && <li className="px-2.5 pb-1 pt-2.5 text-[11px] font-medium uppercase tracking-[0.06em] text-faint" role="presentation">{head}</li>}
+              <li data-i={i} role="option" aria-selected={i === idx} onMouseMove={() => setIdx(i)} onClick={() => run(it)}
+                className={cx("flex cursor-default items-center gap-3 rounded-lg px-2.5 py-2", i === idx ? "bg-sunken" : "")}>
+                <span className={cx("inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-fg/[0.08]", it.tone ? TEXT[it.tone] : "text-muted")}><Icon n={it.icon} size={14} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-medium">{it.label}</span>
+                  {it.hint && <span className="block truncate text-[12px] text-muted">{it.hint}</span>}
+                </span>
+                {it.kbd && <span className="flex gap-0.5">{it.kbd.map((k) => <Kbd key={k}>{k}</Kbd>)}</span>}
+                {i === idx && <Icon n="CornerDownLeft" size={14} className="text-faint" />}
+              </li>
+            </React.Fragment>
+          );
+        })}
+      </ul>
+      <div className="flex items-center gap-4 border-t border-fg/[0.08] px-4 py-2 text-[12px] text-faint">
+        <span className="inline-flex items-center gap-1"><Kbd>↑</Kbd><Kbd>↓</Kbd> navegar</span>
+        <span className="inline-flex items-center gap-1"><Kbd>↵</Kbd> abrir</span>
+        <span className="ml-auto">{filtered.length} resultados</span>
+      </div>
+    </Overlay>
+  );
+}
+
+function RescheduleDialog({ patient, onClose, onConfirm }) {
+  const [sel, setSel] = useState(0);
+  const [notify, setNotify] = useState(true);
+  const ref = useRef(null);
+  useEffect(() => { ref.current && ref.current.focus(); }, []);
+  const onKey = (e) => {
+    if (["1", "2", "3"].includes(e.key)) { setSel(Number(e.key) - 1); e.preventDefault(); }
+    else if (e.key === "ArrowDown") { setSel((s) => Math.min(s + 1, 2)); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { setSel((s) => Math.max(s - 1, 0)); e.preventDefault(); }
+    else if (e.key === "Enter") { e.preventDefault(); onConfirm(RESCHEDULE_SLOTS[sel], notify); }
+    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+  };
+  return (
+    <Overlay onClose={onClose} label={`Reagendar ${patient.name}`} align="center">
+      <div ref={ref} tabIndex={-1} onKeyDown={onKey} className="outline-none">
+        <div className="flex items-start gap-3 border-b border-fg/[0.08] p-4">
+          <Avatar name={patient.name} size={36} />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[15px] font-semibold">Reagendar {patient.name}</h2>
+            <p className="text-[12px] text-muted"><span className="font-mono tnum">{hm(patient.time)}</span> · {DOCS[patient.doc].name} · {patient.type}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar" className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-sunken"><Icon n="X" size={15} /></button>
+        </div>
+        <div className="p-2">
+          <p className="flex items-center gap-1.5 px-2 pb-1.5 pt-1 text-[12px] text-ai"><Icon n="Sparkles" size={13} />Sugestões do Copilot pelo histórico do paciente</p>
+          {RESCHEDULE_SLOTS.map((s, i) => (
+            <button key={s.id} type="button" onClick={() => setSel(i)} onDoubleClick={() => onConfirm(s, notify)} aria-pressed={i === sel}
+              className={cx("flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors", i === sel ? "border-ai/40 bg-ai/[0.06]" : "border-transparent hover:bg-sunken")}>
+              <Kbd>{i + 1}</Kbd>
+              <span className="flex-1"><span className="block font-mono text-[13.5px] font-medium tnum">{s.label}</span><span className="block text-[12px] text-muted">{s.hint}</span></span>
+              {i === sel && <Icon n="Check" size={15} className="text-ai" />}
+            </button>
+          ))}
+        </div>
+        <label htmlFor="notify-wa" className="mx-4 flex cursor-pointer items-center gap-2.5 rounded-lg py-2 text-[13px]">
+          <input id="notify-wa" type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--ai))]" />
+          Copilot avisa {first(patient.name)} pelo WhatsApp e libera a vaga para o Smart Fill
+        </label>
+        <div className="flex items-center justify-end gap-2 border-t border-fg/[0.08] p-3">
+          <button type="button" onClick={onClose} className="h-8 rounded-lg px-3 text-[13px] font-medium text-muted hover:bg-sunken">Cancelar</button>
+          <button type="button" onClick={() => onConfirm(RESCHEDULE_SLOTS[sel], notify)} className="inline-flex h-8 items-center gap-2 rounded-lg bg-fg px-3 text-[13px] font-medium text-bg hover:bg-fg/85">
+            Reagendar <Kbd className="border-bg/20 bg-bg/10 text-bg/80 shadow-none">↵</Kbd>
+          </button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+const SHORTCUTS = [
+  ["Navegar entre pacientes", ["↑", "↓", "←", "→"]],
+  ["Check-in de quem está chegando", ["C"]],
+  ["Liberar da recepção para a espera", ["E"]],
+  ["Notificar sala (chama ou avisa o médico)", ["N"]],
+  ["Finalizar atendimento", ["F"]],
+  ["Agendar retorno", ["A"]],
+  ["Reagendar", ["R"]],
+  ["Desfazer última ação", ["Z"]],
+  ["Busca rápida", ["Ctrl", "K"]],
+  ["Esta lista", ["?"]],
+];
+
+function ShortcutsDialog({ onClose }) {
+  const ref = useRef(null);
+  useEffect(() => { ref.current && ref.current.focus(); }, []);
+  return (
+    <Overlay onClose={onClose} label="Atalhos de teclado" align="center">
+      <div ref={ref} tabIndex={-1} onKeyDown={(e) => (e.key === "Escape" || e.key === "?") && onClose()} className="outline-none">
+        <div className="flex items-center gap-2 border-b border-fg/[0.08] p-4"><Icon n="Keyboard" size={16} className="text-muted" /><h2 className="text-[15px] font-semibold">Atalhos do cockpit</h2><span className="ml-auto"><Kbd>Esc</Kbd></span></div>
+        <ul className="divide-y divide-fg/[0.06] px-4 py-1">
+          {SHORTCUTS.map(([label, keys]) => (
+            <li key={label} className="flex items-center justify-between gap-4 py-2.5 text-[13px]"><span>{label}</span><span className="flex gap-1">{keys.map((k) => <Kbd key={k}>{k}</Kbd>)}</span></li>
+          ))}
+        </ul>
+      </div>
+    </Overlay>
+  );
+}
+
+function Toast({ toast, onUndo, onClose }) {
+  if (!toast) return null;
+  return (
+    <div className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4" style={{ bottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}>
+      <div key={toast.id} role="status" className="anim-pop pointer-events-auto flex max-w-[560px] items-center gap-3 rounded-xl border border-fg/[0.1] bg-fg py-2 pl-3 pr-2 text-[13px] text-bg shadow-[0_20px_50px_-20px_rgb(0_0_0/0.5)]">
+        <Icon n={toast.icon || "Check"} size={15} className={toast.tone === "ai" ? "text-[rgb(var(--ai))]" : "text-[rgb(var(--ok))]"} />
+        <span className="min-w-0 flex-1">{toast.msg}</span>
+        {toast.undo && (
+          <button type="button" onClick={onUndo} className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 font-medium text-bg/80 hover:bg-bg/10">
+            Desfazer <Kbd className="border-bg/20 bg-bg/10 text-bg/80 shadow-none">Z</Kbd>
+          </button>
+        )}
+        <button type="button" onClick={onClose} aria-label="Fechar aviso" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-bg/60 hover:bg-bg/10"><Icon n="X" size={14} /></button>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── app ───────────────────────── */
+const SF_INITIAL = {
+  status: "running",
+  openedAt: T(10, 39, 0),
+  filledAt: null,
+  candidates: [
+    { name: "Eduardo Brandão", reason: "Prioridade alta · palpitações · Unimed", status: "lido" },
+    { name: "Lívia Martins", reason: "Check-up · flexível à tarde", status: "enviado" },
+    { name: "Otávio Reis", reason: "Retorno ecocardiograma", status: "fila" },
+  ],
+};
+
+function App() {
+  const [now, setNow] = useState(START);
+  const [patients, setPatients] = useState(INITIAL);
+  const [activity, setActivity] = useState(INITIAL_ACTIVITY);
+  const [kpi, setKpi] = useState({ filled: 47, total: 50, saved: 4, revenue: 3200, avgWait: 8 });
+  const [sf, setSf] = useState(SF_INITIAL);
+  const [selectedId, setSelectedId] = useState("p09");
+  const [palette, setPalette] = useState(false);
+  const [resched, setResched] = useState(null);
+  const [help, setHelp] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [dayOffset, setDayOffset] = useState(0);
+  const lastFocusRef = useRef(null);
+
+  useEffect(() => { const t = setInterval(() => setNow((n) => n + 1), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 6000); return () => clearTimeout(t); }, [toast]);
+
+  const showToast = (msg, opts = {}) => setToast({ id: Math.random(), msg, ...opts });
+  const log = (tone, icon, text) => setActivity((a) => [{ t: now, tone, icon, text }, ...a]);
+
+  // Smart Fill: a lista de espera responde sozinha enquanto a recepção trabalha.
+  useEffect(() => {
+    if (sf.status !== "running") return;
+    if (now >= START + 14 && sf.candidates[0].status === "lido") {
+      setSf((s) => ({ ...s, candidates: s.candidates.map((c, i) => (i === 0 ? { ...c, status: "digitando" } : c)) }));
+    }
+    if (now >= START + 28) {
+      setSf((s) => ({ ...s, status: "filled", filledAt: now, candidates: s.candidates.map((c, i) => ({ ...c, status: i === 0 ? "aceitou" : "cancelado" })) }));
+      setPatients((ps) => [...ps, { id: "p18", name: "Eduardo Brandão", doc: "okada", time: T(15, 30), type: "Consulta · palpitações", payer: conv("Unimed"), stage: "arriving", confirmedAt: now, smartFill: now }]);
+      setKpi((k) => ({ ...k, filled: k.filled + 1, saved: k.saved + 1, revenue: k.revenue + 380 }));
+      log("ok", "Zap", `Vaga 15:30 da Dra. Okada preenchida em ${mmss(now - sf.openedAt)} por Eduardo Brandão. Nenhuma ligação feita.`);
+      showToast(`Vaga das 15:30 reposta em ${mmss(now - sf.openedAt)} · Eduardo Brandão confirmou pelo WhatsApp`, { icon: "Zap", tone: "ok" });
+    }
+  }, [now]);
+
+  const byStage = useMemo(() => {
+    const g = Object.fromEntries(STAGES.map((s) => [s.id, []]));
+    patients.forEach((p) => g[p.stage] && g[p.stage].push(p));
+    g.arriving.sort((a, b) => a.time - b.time);
+    g.reception.sort((a, b) => a.checkedInAt - b.checkedInAt);
+    g.waiting.sort((a, b) => a.waitingSince - b.waitingSince);
+    g.consult.sort((a, b) => a.startedAt - b.startedAt);
+    g.done.sort((a, b) => b.finishedAt - a.finishedAt);
+    return g;
+  }, [patients]);
+
+  const docBusy = useMemo(() => {
+    const m = {};
+    byStage.consult.forEach((p) => { m[p.doc] = { over: Math.floor((now - p.startedAt) / 60) - p.planned }; });
+    return m;
+  }, [byStage, now]);
+
+  const weather = useMemo(() => {
+    const late = byStage.consult.map((p) => ({ p, over: Math.floor((now - p.startedAt) / 60) - p.planned })).filter((x) => x.over > 0);
+    const overTol = byStage.waiting.filter((p) => now - p.waitingSince >= TOLERANCE);
+    const parts = [];
+    late.forEach((x) => parts.push(`${DOCS[x.p.doc].short} +${x.over} min`));
+    if (overTol.length) parts.push(`${overTol.length} acima da tolerância`);
+    const level = late.length + overTol.length >= 3 ? "bad" : late.length + overTol.length > 0 ? "warn" : "ok";
+    return { level, detail: parts.join(" · ") || "sem atrasos" };
+  }, [byStage, now]);
+
+  const select = (id) => setSelectedId(id);
+  const focusCard = (id) => requestAnimationFrame(() => {
+    const el = document.querySelector(`[data-pid="${id}"]`);
+    if (el) { el.focus({ preventScroll: true }); el.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+  });
+
+  const patch = (id, fields) => patients.map((p) => (p.id === id ? { ...p, ...fields } : p));
+
+  function perform(id, key) {
+    const p = patients.find((x) => x.id === id);
+    if (!p) return;
+    const prev = { patients, activity };
+    const room = DOCS[p.doc].room;
+    let next = null, msg = "", icon = "Check", tone = "ok", entry = null;
+
+    if (key === "r" && ["arriving", "reception", "waiting"].includes(p.stage)) {
+      lastFocusRef.current = id; setResched(id); return;
+    }
+    if (p.stage === "arriving" && key === "c") {
+      next = patch(id, { stage: "reception", checkedInAt: now, intake: { ok: true, text: "Carteirinha validada no balcão" } });
+      msg = `${p.name} fez check-in`; icon = "LogIn";
+      entry = ["fg", "ScanLine", `${p.name} fez check-in no balcão.`];
+    } else if (p.stage === "reception" && key === "e") {
+      next = patch(id, { stage: "waiting", waitingSince: now });
+      msg = `${first(p.name)} liberado para a espera · cronômetro iniciado`; icon = "Armchair";
+      entry = ["fg", "Armchair", `${p.name} foi para a sala de espera.`];
+    } else if (p.stage === "waiting" && key === "n") {
+      if (docBusy[p.doc]) {
+        next = patch(id, { notifiedAt: now });
+        msg = `${DOCS[p.doc].short} avisado na tela: ${first(p.name)} está pronto`; icon = "BellRing"; tone = "ai";
+        entry = ["ai", "BellRing", `Aviso silencioso na ${room}: ${p.name} aguardando.`];
+      } else {
+        next = patch(id, { stage: "consult", startedAt: now, planned: 30, notifiedAt: null });
+        msg = `${first(p.name)} chamado para a ${room}`; icon = "BellRing";
+        entry = ["ok", "DoorOpen", `${p.name} entrou na ${room} com ${DOCS[p.doc].short}.`];
+      }
+    } else if (p.stage === "consult" && key === "f") {
+      next = patch(id, { stage: "done", finishedAt: now, followUp: { kind: "pending", text: "Retorno em 30 dias" } });
+      msg = `Atendimento de ${first(p.name)} finalizado · retorno entra na fila`; icon = "CircleCheck";
+      entry = ["ok", "CircleCheck", `${p.name} finalizou com ${DOCS[p.doc].short}. Retorno em 30 dias a agendar.`];
+    } else if (p.stage === "done" && key === "a" && p.followUp && p.followUp.kind !== "scheduled") {
+      next = patch(id, { followUp: { kind: "scheduled", text: "Retorno 09/11 · 10:00 · convite enviado" } });
+      msg = `Retorno de ${first(p.name)} agendado · Copilot enviou o convite`; icon = "CalendarCheck"; tone = "ai";
+      entry = ["ai", "CalendarCheck", `Retorno de ${p.name} agendado para 09/11 10:00. Convite enviado pelo WhatsApp.`];
+    }
+    if (!next) return;
+    setPatients(next);
+    if (entry) log(...entry);
+    showToast(msg, { icon, tone, undo: prev });
+    focusCard(id);
+  }
+
+  function confirmReschedule(slot, notify) {
+    const p = patients.find((x) => x.id === resched);
+    if (!p) return;
+    const prev = { patients, activity };
+    setPatients(patients.filter((x) => x.id !== p.id));
+    log("ai", "CalendarClock", `${p.name} remarcado para ${slot.label}.${notify ? " Copilot avisou pelo WhatsApp e abriu a vaga no Smart Fill." : ""}`);
+    showToast(`${p.name} remarcado para ${slot.label}${notify ? " · paciente avisado" : ""}`, { icon: "CalendarClock", tone: "ai", undo: prev });
+    setResched(null);
+    setSelectedId(null);
+  }
+
+  function undo() {
+    if (!toast || !toast.undo) return;
+    setPatients(toast.undo.patients);
+    setActivity(toast.undo.activity);
+    setToast({ id: Math.random(), msg: "Ação desfeita", icon: "Undo2", tone: "ai" });
+  }
+
+  const navigate = (label) => showToast(`${label} é a próxima tela desta série. O cockpit continua ao vivo.`, { icon: "LayoutGrid", tone: "ai" });
+
+  function move(k) {
+    const cols = STAGES.map((s) => byStage[s.id]);
+    let ci = cols.findIndex((c) => c.some((p) => p.id === selectedId));
+    if (ci < 0) { const c = cols.find((c) => c.length); if (c) { select(c[0].id); focusCard(c[0].id); } return; }
+    let ri = cols[ci].findIndex((p) => p.id === selectedId);
+    if (k === "arrowdown" || k === "j") ri = Math.min(ri + 1, cols[ci].length - 1);
+    else if (k === "arrowup" || k === "k") ri = Math.max(ri - 1, 0);
+    else {
+      const dir = k === "arrowright" || k === "l" ? 1 : -1;
+      let nci = ci + dir;
+      while (nci >= 0 && nci < cols.length && !cols[nci].length) nci += dir;
+      if (nci < 0 || nci >= cols.length) return;
+      ci = nci; ri = Math.min(ri, cols[ci].length - 1);
+    }
+    const id = cols[ci][ri].id;
+    select(id); focusCard(id);
+  }
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const k = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && k === "k") { e.preventDefault(); setPalette((o) => !o); return; }
+      if (palette || resched || help) return;
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "/") { e.preventDefault(); setPalette(true); return; }
+      if (e.key === "?") { e.preventDefault(); setHelp(true); return; }
+      if (e.key === "Escape") { setSelectedId(null); return; }
+      if (k === "z") { e.preventDefault(); undo(); return; }
+      if (["arrowdown", "arrowup", "arrowleft", "arrowright", "j", "k", "h", "l"].includes(k)) { e.preventDefault(); move(k); return; }
+      if (selectedId && ["c", "e", "n", "f", "a", "r"].includes(k)) { e.preventDefault(); perform(selectedId, k); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const closeOverlay = (setter) => () => { setter(false); const id = lastFocusRef.current || selectedId; id && focusCard(id); };
+
+  const paletteItems = useMemo(() => {
+    const items = patients.map((p) => ({
+      id: "p-" + p.id, group: "Pacientes de hoje", icon: "UserRound", label: p.name,
+      hint: `${hm(p.time)} · ${DOCS[p.doc].short} · ${STAGE_LABEL[p.stage]}`,
+      run: () => { select(p.id); focusCard(p.id); },
+    }));
+    const nextWaiting = byStage.waiting.find((p) => !docBusy[p.doc]);
+    const actions = [
+      nextWaiting && { id: "a-call", group: "Ações", icon: "BellRing", tone: "ok", label: `Chamar ${nextWaiting.name} para a ${DOCS[nextWaiting.doc].room}`, hint: "Sala livre agora", kbd: ["N"], run: () => perform(nextWaiting.id, "n") },
+      { id: "a-sf", group: "Ações", icon: "Zap", tone: "ai", label: "Acompanhar Smart Fill das 15:30", hint: sf.status === "filled" ? "Vaga reposta" : "Copilot contatando a lista de espera", run: () => document.getElementById("rail") && document.getElementById("rail").scrollIntoView({ behavior: "smooth" }) },
+      { id: "a-theme", group: "Ações", icon: "SunMoon", label: "Alternar tema claro e escuro", run: () => window.__toggleTheme && window.__toggleTheme() },
+      { id: "a-help", group: "Ações", icon: "Keyboard", label: "Mostrar atalhos de teclado", kbd: ["?"], run: () => setHelp(true) },
+    ].filter(Boolean);
+    const nav = [
+      { id: "n-agenda", group: "Ir para", icon: "CalendarDays", label: "Agenda inteligente", hint: "Dia, semana e por profissional", run: () => navigate("A Agenda inteligente") },
+      { id: "n-comms", group: "Ir para", icon: "MessagesSquare", label: "Centro de Resgate", hint: "Conversas do Copilot e lista de espera", run: () => navigate("O Centro de Resgate") },
+      { id: "n-p360", group: "Ir para", icon: "UsersRound", label: "Paciente 360", hint: "Ficha, exames e continuidade", run: () => navigate("O Paciente 360") },
+    ];
+    return [...actions, ...items, ...nav];
+  }, [patients, byStage, docBusy, sf.status]);
+
+  const reschedPatient = resched && patients.find((p) => p.id === resched);
+
+  return (
+    <div className="min-h-full">
+      <Header now={now} dayOffset={dayOffset} setDayOffset={setDayOffset} weather={weather} onOpenPalette={() => setPalette(true)} onNavigate={navigate} />
+
+      <main className="mx-auto flex max-w-[1680px] flex-col gap-4 px-4 pb-24 pt-4 sm:px-6">
+        {dayOffset !== 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-ai/20 bg-ai/[0.06] px-3 py-2 text-[13px]">
+            <Icon n="History" size={15} className="text-ai" />
+            Outro dia selecionado. Para consultar o histórico, abra a Agenda; o cockpit abaixo continua mostrando o fluxo ao vivo de hoje.
+          </div>
+        )}
+
+        <Vitals kpi={kpi} waiting={byStage.waiting} now={now} />
+        <DayStrip now={now} filledFreed={sf.status === "filled"} />
+
+        <div className="grid gap-4 min-[1800px]:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="flex min-w-0 flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
+              <h1 className="text-[15px] font-semibold tracking-tight">Fluxo ao vivo</h1>
+              <span className="text-[12px] text-muted">da confirmação ao retorno, na ordem em que acontece</span>
+              <button type="button" onClick={() => setHelp(true)} className="ml-auto hidden items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted hover:bg-sunken hover:text-fg sm:inline-flex"><Kbd>?</Kbd>atalhos</button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {STAGES.map((s) => (
+                <Column key={s.id} stage={s} list={byStage[s.id]} now={now} selectedId={selectedId} onSelect={select} onAction={perform} docBusy={docBusy} />
+              ))}
+            </div>
+          </div>
+
+          <aside id="rail" aria-label="Copilot" className="grid gap-4 md:grid-cols-3 min-[1800px]:flex min-[1800px]:flex-col">
+            <SmartFillCard sf={sf} now={now} onOpenComms={() => navigate("O Centro de Resgate")} />
+            <Rooms patients={patients} now={now} onCall={(id) => perform(id, "n")} />
+            <Activity items={activity} />
+          </aside>
+        </div>
+
+        <footer className="hidden flex-wrap items-center gap-x-4 gap-y-2 border-t border-fg/[0.06] px-1 pt-3 text-[12px] text-muted md:flex">
+          {[["↑↓←→", "navegar"], ["C", "check-in"], ["E", "liberar p/ espera"], ["N", "notificar sala"], ["F", "finalizar"], ["A", "agendar retorno"], ["R", "reagendar"], ["Z", "desfazer"]].map(([k, l]) => (
+            <span key={k} className="inline-flex items-center gap-1.5"><Kbd>{k}</Kbd>{l}</span>
+          ))}
+          <span className="ml-auto text-faint">Dados de exemplo · {CLINIC}</span>
+        </footer>
+      </main>
+
+      {palette && <CommandPalette items={paletteItems} onClose={closeOverlay(setPalette)} />}
+      {reschedPatient && <RescheduleDialog patient={reschedPatient} onClose={() => { setResched(null); focusCard(reschedPatient.id); }} onConfirm={confirmReschedule} />}
+      {help && <ShortcutsDialog onClose={closeOverlay(setHelp)} />}
+      <Toast toast={toast} onUndo={undo} onClose={() => setToast(null)} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>

@@ -10,11 +10,12 @@ import {
   toAppointmentListItem,
 } from "./appointment.mapper";
 import { ACTIVE_STATUSES } from "./appointment-status.machine";
-import { CheckAvailabilityDto, ListSlotsQueryDto } from "./dto/appointment.dto";
+import { ListSlotsQueryDto } from "./dto/appointment.dto";
 import {
   AvailabilityResultDto,
   TimeSlotDto,
 } from "./dto/appointment-response.dto";
+import { CheckAvailabilityRequest } from "./requests/check-availability.request";
 
 /**
  * Disponibilidade da agenda: verificação de conflitos e horários livres.
@@ -55,7 +56,7 @@ export class AvailabilityService {
   }
 
   /** Checagem prévia (POST /appointments/availability). Não grava nada. */
-  async check(dto: CheckAvailabilityDto): Promise<AvailabilityResultDto> {
+  async check(dto: CheckAvailabilityRequest): Promise<AvailabilityResultDto> {
     const professional = await this.getProfessionalOrThrow(dto.professionalId);
     const durationMinutes = await this.resolveDuration(
       professional,
@@ -69,7 +70,9 @@ export class AvailabilityService {
         dto.professionalId,
         startsAt,
         endsAt,
-        dto.ignoreAppointmentId,
+        // O schema expõe `excludeAppointmentId`; `ignoreAppointmentId` fica
+        // como alias para quem ainda manda o nome antigo.
+        dto.excludeAppointmentId ?? dto.ignoreAppointmentId,
       ),
       this.isWithinSchedule(dto.professionalId, startsAt, endsAt),
       this.settings.get(),
@@ -164,6 +167,9 @@ export class AvailabilityService {
           professionalId: query.professionalId,
           status: { in: ACTIVE_STATUSES },
           startsAt: { gte: start, lt: end },
+          ...(query.excludeAppointmentId
+            ? { id: { not: query.excludeAppointmentId } }
+            : {}),
         },
         select: { startsAt: true, endsAt: true },
       }),

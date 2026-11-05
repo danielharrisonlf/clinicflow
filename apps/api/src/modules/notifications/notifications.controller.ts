@@ -16,11 +16,11 @@ import { AppointmentStatus, Channel } from "@prisma/client";
 import { config } from "../../common/config";
 import { ApiPageResponse } from "../../common/decorators/api-paginated-response.decorator";
 import { Public } from "../../common/decorators/public.decorator";
-import { PageOptionsDto } from "../../common/dto/page-options.dto";
 import { AppException } from "../../common/exceptions/app.exception";
 import type { AuthenticatedUser } from "../../common/interfaces/authenticated-user.interface";
 import { PrismaService } from "../../shared/prisma/prisma.service";
 import { AppointmentsService } from "../appointments/appointments.service";
+import { ListNotificationsQueryDto } from "./dto/list-notifications-query.dto";
 import { WhatsappWebhookDto } from "./dto/whatsapp-webhook.dto";
 import {
   NotificationResponseDto,
@@ -40,11 +40,8 @@ export class NotificationsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: "Histórico de envios" })
   @ApiPageResponse(NotificationResponseDto)
-  findAll(
-    @Query() options: PageOptionsDto,
-    @Query("appointmentId") appointmentId?: string,
-  ) {
-    return this.notificationsService.findAll(options, appointmentId);
+  findAll(@Query() query: ListNotificationsQueryDto) {
+    return this.notificationsService.findAll(query, query.appointmentId);
   }
 
   @Post("notifications/appointments/:id/confirmation")

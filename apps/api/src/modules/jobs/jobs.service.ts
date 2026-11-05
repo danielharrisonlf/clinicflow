@@ -35,8 +35,8 @@ export class JobsService {
   /**
    * Gera as pendências de confirmação de consultas próximas.
    *
-   * Idempotente por construção (`createSystemTask` ignora duplicatas), então
-   * rodar de hora em hora não empilha 24 linhas por consulta.
+   * Tarefas e notificações automáticas são deduplicadas por consulta e horário,
+   * inclusive quando há mais de uma execução do job.
    */
   @Cron(CronExpression.EVERY_HOUR, { name: "confirmacoes-pendentes" })
   async generatePendingConfirmations(): Promise<void> {
@@ -67,7 +67,9 @@ export class JobsService {
       });
 
       if (settings.whatsappEnabled) {
-        await this.notifications.sendConfirmationRequest(appointment.id);
+        await this.notifications.sendConfirmationRequest(appointment.id, {
+          automatic: true,
+        });
       }
     }
 

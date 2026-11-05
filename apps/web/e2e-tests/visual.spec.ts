@@ -122,6 +122,44 @@ test("captura as telas de referência", async ({ page }) => {
     ) {
       return route.abort();
     }
+    if (url.includes("/search")) {
+      return json({
+        actions: [
+          {
+            id: "new-appointment",
+            title: "Nova consulta",
+            subtitle: null,
+            shortcut: "N",
+          },
+          {
+            id: "open-waiting-room",
+            title: "Sala de espera",
+            subtitle: null,
+            shortcut: "S",
+          },
+        ],
+        patients: [
+          {
+            id: "p1",
+            name: "Luiza Fernandes Rocha",
+            phone: "(11) 97711-2030",
+            subtitle: "Retorno às 09:30",
+            stateLabel: "Aguardando 18min",
+          },
+        ],
+        professionals: [],
+      });
+    }
+    if (url.includes("/settings")) {
+      return json({
+        clinicName: "Clínica Viver",
+        timezone: "America/Sao_Paulo",
+        defaultDurationMinutes: 30,
+        confirmationLeadHours: 48,
+        returnWindowDays: 30,
+        lateToleranceMinutes: 15,
+      });
+    }
     if (url.includes("/dashboard/today")) {
       return json({
         date: "2026-09-11",
@@ -153,6 +191,7 @@ test("captura as telas de referência", async ({ page }) => {
         waitingCount: 3,
         averageWaitMinutes: 16,
         longestWaitMinutes: 27,
+        inProgressCount: 1,
       });
     }
     if (url.includes("/waiting-room")) {
@@ -161,6 +200,9 @@ test("captura as telas de referência", async ({ page }) => {
           appointmentId: "a2",
           patientId: "p1",
           patientName: "Carlos Eduardo Dias",
+          patientPhone: "(11) 98432-1190",
+          type: "PRIMEIRA_CONSULTA",
+          isLate: true,
           professionalName: "Dra. Helena Prado",
           waitingMinutes: 27,
           waitingLabel: "27min",
@@ -173,6 +215,9 @@ test("captura as telas de referência", async ({ page }) => {
           appointmentId: "a3",
           patientId: "p2",
           patientName: "Luiza Fernandes Rocha",
+          patientPhone: "(11) 97711-2030",
+          type: "RETORNO",
+          isLate: false,
           professionalName: "Dra. Helena Prado",
           waitingMinutes: 18,
           waitingLabel: "18min",
@@ -185,6 +230,9 @@ test("captura as telas de referência", async ({ page }) => {
           appointmentId: "a7",
           patientId: "p3",
           patientName: "Patrícia Muniz",
+          patientPhone: "(11) 96650-7781",
+          type: "CONSULTA",
+          isLate: false,
           professionalName: "Dra. Camila Sousa",
           waitingMinutes: 4,
           waitingLabel: "4min",

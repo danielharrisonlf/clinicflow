@@ -1,10 +1,14 @@
-import { Logger, ValidationPipe } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import express from "express";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { config } from "./common/config";
+import {
+  AppValidationPipe,
+  GLOBAL_VALIDATION_OPTIONS,
+} from "./common/pipes/app-validation.pipe";
 
 async function bootstrap(): Promise<void> {
   // Falha no boot, e não na primeira requisição, se faltar segredo em produção.
@@ -36,18 +40,7 @@ async function bootstrap(): Promise<void> {
     express.raw({ type: () => true, limit: config.storage.maxFileBytes }),
   );
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: {
-        // Sem coerção implícita: a conversão vem dos @Type() dos DTOs, para
-        // "abc" em um campo numérico virar erro de validação, não NaN.
-        enableImplicitConversion: false,
-      },
-    }),
-  );
+  app.useGlobalPipes(new AppValidationPipe(GLOBAL_VALIDATION_OPTIONS));
 
   // Prisma e os crons precisam fechar limpo quando o contêiner recebe SIGTERM.
   app.enableShutdownHooks();

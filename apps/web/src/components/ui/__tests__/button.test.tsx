@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Button } from "../button";
+import { Button, IconButton } from "../button";
 
 describe("Button", () => {
   /**
@@ -24,7 +24,7 @@ describe("Button", () => {
     );
     const className = screen.getByRole("button").className;
     expect(className).toContain("text-ink-onaccent");
-    expect(className).toContain("text-micro");
+    expect(className).toContain("text-label");
   });
 
   it("deixa o className do chamador sobrescrever a cor", () => {
@@ -32,6 +32,25 @@ describe("Button", () => {
     const className = screen.getByRole("button").className;
     expect(className).toContain("text-ink-primary");
     expect(className).not.toContain("text-ink-onaccent");
+  });
+
+  it("conhece os raios e sombras do sistema ao mesclar classes", () => {
+    // Mesma armadilha do tamanho de fonte: sem os tokens no extendTailwindMerge,
+    // `rounded-modal` e `rounded-control` conviveriam e o último CSS venceria.
+    render(<Button className="rounded-modal shadow-raised">Ação</Button>);
+    const className = screen.getByRole("button").className;
+    expect(className).toContain("rounded-modal");
+    expect(className).not.toContain("rounded-control");
+    expect(className).toContain("shadow-raised");
+  });
+
+  it("exige rótulo acessível no botão só de ícone", () => {
+    render(
+      <IconButton label="Fechar">
+        <svg aria-hidden="true" />
+      </IconButton>,
+    );
+    expect(screen.getByRole("button", { name: "Fechar" })).toBeInTheDocument();
   });
 
   it("desabilita e anuncia enquanto carrega", () => {

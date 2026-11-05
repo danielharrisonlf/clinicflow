@@ -5,8 +5,11 @@ import { ErrorCode } from "../../../common/constants/error-codes";
 import { AppException } from "../../../common/exceptions/app.exception";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-user.interface";
 import { ClinicTime } from "../../../common/utils/clinic-time.util";
+import { isAppointmentOverlapViolation } from "../../../common/utils/prisma-errors.util";
 import { AuditService } from "../../../shared/audit/audit.service";
 import { PrismaService } from "../../../shared/prisma/prisma.service";
+import type { AppointmentWithRelations } from "../appointment.mapper";
+import { OVERBOOKING_REASON } from "../appointment-overbooking";
 import { AppointmentStateMachine } from "../appointment-status.machine";
 import { AvailabilityService } from "../availability.service";
 import { AppointmentDetailDto } from "../dto/appointment-response.dto";
@@ -46,17 +49,77 @@ export class RescheduleAppointmentService {
     const startsAt = ClinicTime.combine(dto.date, dto.time);
     const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
 
-    await this.assertSlotIsFree({
+    const slot = {
       professionalId: original.professionalId,
       professionalName: professional.name,
       startsAt,
       endsAt,
       time: dto.time,
-      allowOverbooking: dto.allowOverbooking ?? false,
+    };
+    const allowOverbooking = dto.allowOverbooking ?? false;
+    const conflict = await this.assertSlotIsFree({
+      ...slot,
+      allowOverbooking,
       ignoreAppointmentId: id,
     });
 
+    // Mesma regra da criação: só vira encaixe se o horário novo de fato
+    // sobrepõe outra consulta. A original sai da trava ao virar REAGENDADA
+    // na mesma transação, então mover para um horário que sobrepõe a própria
+    // original não é encaixe.
+    let isOverbooked = allowOverbooking && conflict !== null;
     const newId = uuidv7();
+
+    try {
+      await this.persist(id, newId, original, dto, actor, {
+        startsAt,
+        endsAt,
+        isOverbooked,
+      });
+    } catch (error) {
+      if (!isAppointmentOverlapViolation(error)) throw error;
+      if (!allowOverbooking || isOverbooked) {
+        throw slotConflictException(slot, null);
+      }
+      isOverbooked = true;
+      await this.persist(id, newId, original, dto, actor, {
+        startsAt,
+        endsAt,
+        isOverbooked,
+      });
+    }
+
+    await this.audit.record({
+      actor,
+      action: "appointment.rescheduled",
+      entity: "Appointment",
+      entityId: id,
+      before: { startsAt: original.startsAt.toISOString() },
+      after: {
+        newAppointmentId: newId,
+        startsAt: startsAt.toISOString(),
+        reason: dto.reason,
+        overbooked: isOverbooked,
+      },
+    });
+
+    this.logger.log(
+      `Consulta ${original.code} reagendada para ${dto.date} ${dto.time}.`,
+    );
+
+    return this.findByIdService.execute(newId);
+  }
+
+  private async persist(
+    id: string,
+    newId: string,
+    original: AppointmentWithRelations,
+    dto: RescheduleAppointmentRequest,
+    actor: AuthenticatedUser,
+    target: { startsAt: Date; endsAt: Date; isOverbooked: boolean },
+  ): Promise<void> {
+    const { startsAt, endsAt, isOverbooked } = target;
+    const createdReason = `Reagendada de ${ClinicTime.isoDateOf(original.startsAt)} ${ClinicTime.timeOf(original.startsAt)} — ${dto.reason}`;
 
     await this.prisma.$transaction(async (tx) => {
       await tx.appointment.update({
@@ -88,6 +151,7 @@ export class RescheduleAppointmentService {
           room: original.room,
           notes: original.notes,
           rescheduledFromId: id,
+          isOverbooked,
           createdById: actor.id,
         },
       });
@@ -100,56 +164,53 @@ export class RescheduleAppointmentService {
           actorId: actor.id,
           actorName: actor.name,
           channel: Channel.WEB,
-          reason: `Reagendada de ${ClinicTime.isoDateOf(original.startsAt)} ${ClinicTime.timeOf(original.startsAt)} — ${dto.reason}`,
+          reason: isOverbooked
+            ? `${createdReason} — ${OVERBOOKING_REASON}`
+            : createdReason,
         },
       });
     });
-
-    await this.audit.record({
-      actor,
-      action: "appointment.rescheduled",
-      entity: "Appointment",
-      entityId: id,
-      before: { startsAt: original.startsAt.toISOString() },
-      after: {
-        newAppointmentId: newId,
-        startsAt: startsAt.toISOString(),
-        reason: dto.reason,
-      },
-    });
-
-    this.logger.log(
-      `Consulta ${original.code} reagendada para ${dto.date} ${dto.time}.`,
-    );
-
-    return this.findByIdService.execute(newId);
   }
 
-  private async assertSlotIsFree(params: {
-    professionalId: string;
-    professionalName: string;
-    startsAt: Date;
-    endsAt: Date;
-    time: string;
-    allowOverbooking: boolean;
-    ignoreAppointmentId?: string;
-  }): Promise<void> {
+  /** Devolve a primeira consulta sobreposta (ou null) quando o encaixe é permitido. */
+  private async assertSlotIsFree(
+    params: SlotParams & {
+      allowOverbooking: boolean;
+      ignoreAppointmentId?: string;
+    },
+  ) {
     const overlapping = await this.availability.findOverlapping(
       params.professionalId,
       params.startsAt,
       params.endsAt,
       params.ignoreAppointmentId,
     );
+    const first = overlapping[0] ?? null;
 
-    if (overlapping.length > 0 && !params.allowOverbooking) {
-      throw AppException.conflict(
-        ErrorCode.APPOINTMENT_SLOT_CONFLICT,
-        `O horário das ${params.time} do(a) ${params.professionalName} já está ocupado.`,
-        {
-          conflictWithId: overlapping[0]?.id,
-          patientName: overlapping[0]?.patient.name,
-        },
-      );
+    if (first && !params.allowOverbooking) {
+      throw slotConflictException(params, first);
     }
+    return first;
   }
+}
+
+interface SlotParams {
+  professionalId: string;
+  professionalName: string;
+  startsAt: Date;
+  endsAt: Date;
+  time: string;
+}
+
+function slotConflictException(
+  params: SlotParams,
+  conflict: { id: string; patient: { name: string } } | null,
+): AppException {
+  return AppException.conflict(
+    ErrorCode.APPOINTMENT_SLOT_CONFLICT,
+    `O horário das ${params.time} do(a) ${params.professionalName} já está ocupado.`,
+    conflict
+      ? { conflictWithId: conflict.id, patientName: conflict.patient.name }
+      : undefined,
+  );
 }
