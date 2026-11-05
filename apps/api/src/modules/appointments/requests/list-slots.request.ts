@@ -12,6 +12,10 @@ export const ListSlotsQuerySchema = z.object({
     (val) => (typeof val === "string" && val.trim() !== "" ? Number(val) : val),
     z.number().int().min(5).max(480).optional(),
   ),
+  excludeAppointmentId: z
+    .string()
+    .uuid("excludeAppointmentId deve ser um UUID válido.")
+    .optional(),
 });
 
 export type ListSlotsQuery = z.infer<typeof ListSlotsQuerySchema>;
@@ -31,4 +35,10 @@ export class ListSlotsQueryRequest implements ListSlotsQuery {
     example: 30,
   })
   durationMinutes?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Reagendamento: a própria consulta não ocupa a grade (mesma regra da checagem de disponibilidade)",
+  })
+  excludeAppointmentId?: string;
 }

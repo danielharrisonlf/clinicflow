@@ -66,8 +66,8 @@ export function actionsFor(
   );
   return usable.map((target, index) => ({
     target,
-    label: ACTION_BY_TRANSITION[target].label,
-    shortLabel: ACTION_BY_TRANSITION[target].shortLabel,
+    label: ACTION_BY_TRANSITION[target]?.label ?? target,
+    shortLabel: ACTION_BY_TRANSITION[target]?.shortLabel ?? target,
     primary: index === 0,
   }));
 }
@@ -79,16 +79,40 @@ const MUTATION_BY_TARGET: Record<string, (id: string) => Promise<unknown>> = {
   CONCLUIDA: appointmentsApi.complete,
 };
 
-export function useAppointmentTransition() {
+/**
+ * Tudo o que deriva de uma consulta: painel, listas, fila, ficha do paciente
+ * (histórico e próxima visita), pendências (concluir gera retorno, falta gera
+ * resgate) e a agenda do profissional. Uma ação, todas as telas em dia.
+ */
+export function useInvalidateAppointmentViews() {
   const queryClient = useQueryClient();
+  return () => {
+    for (const queryKey of [
+      qk.appointments.all,
+      qk.dashboard.all,
+      qk.waitingRoom.all,
+      qk.patients.all,
+      qk.tasks.all,
+      qk.professionals.all,
+    ]) {
+      void queryClient.invalidateQueries({ queryKey });
+    }
+  };
+}
+
+export function useAppointmentTransition() {
+  const invalidate = useInvalidateAppointmentViews();
   const toast = useToast();
 
   const undo = useMutation({
     mutationFn: (id: string) => appointmentsApi.undo(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: qk.appointments.all });
-      void queryClient.invalidateQueries({ queryKey: qk.dashboard.all });
-      void queryClient.invalidateQueries({ queryKey: qk.waitingRoom.all });
+    onSuccess: (detail) => {
+      invalidate();
+      toast.push({
+        tone: "success",
+        title: "Ação desfeita",
+        description: `${detail.patientName} voltou para "${detail.stateLabel}".`,
+      });
     },
     onError: (error) => {
       toast.push({
@@ -110,18 +134,18 @@ export function useAppointmentTransition() {
       id: string;
       target: AppointmentStatus;
       patientName: string;
-    }) => MUTATION_BY_TARGET[target](id),
+    }) => {
+      const run = MUTATION_BY_TARGET[target];
+      if (!run) throw new Error(`Transição sem ação: ${target}`);
+      return run(id);
+    },
 
     onSuccess: (_data, variables) => {
-      // Invalidação dirigida: painel, listas e fila mudam juntos porque
-      // derivam da mesma consulta.
-      void queryClient.invalidateQueries({ queryKey: qk.appointments.all });
-      void queryClient.invalidateQueries({ queryKey: qk.dashboard.all });
-      void queryClient.invalidateQueries({ queryKey: qk.waitingRoom.all });
-
+      invalidate();
       toast.push({
         tone: "success",
-        title: ACTION_BY_TRANSITION[variables.target].done,
+        title:
+          ACTION_BY_TRANSITION[variables.target]?.done ?? "Consulta atualizada",
         description: variables.patientName,
         onUndo: () => undo.mutate(variables.id),
       });

@@ -25,7 +25,14 @@ describe("StatusBadge", () => {
     }
   });
 
-  it("preenche sólido só o check-in — é o único estado que pede ação imediata", () => {
+  it("leva ícone além da cor — cor nunca é o único sinal", () => {
+    const { container } = render(<StatusBadge state="ATRASADA" />);
+    const icon = container.querySelector("svg");
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("tinge o fundo dos estados e deixa a agendada só no contorno", () => {
     const { container: checkIn } = render(<StatusBadge state="CHECK_IN" />);
     expect(checkIn.firstElementChild?.className).toContain(
       "bg-state-espera-weak",
@@ -33,5 +40,19 @@ describe("StatusBadge", () => {
 
     const { container: agendada } = render(<StatusBadge state="AGENDADA" />);
     expect(agendada.firstElementChild?.className).toContain("bg-transparent");
+  });
+
+  it("pulsa o dot só no que está vivo agora", () => {
+    const live: DerivedState[] = ["CHECK_IN", "EM_ATENDIMENTO", "ATRASADA"];
+    const states: DerivedState[] = [...APPOINTMENT_STATUS, "ATRASADA"];
+    for (const state of states) {
+      const { container, unmount } = render(<StatusBadge state={state} />);
+      const dot = container.querySelector("[aria-hidden='true'].rounded-full");
+      expect(dot).not.toBeNull();
+      expect(dot?.className.includes("animate-pulse-dot")).toBe(
+        live.includes(state),
+      );
+      unmount();
+    }
   });
 });

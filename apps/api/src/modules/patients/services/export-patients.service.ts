@@ -32,7 +32,7 @@ export class ExportPatientsService {
           csvCell(p.cpf ?? ""),
           csvCell(p.phone),
           csvCell(p.email ?? ""),
-          p.birthDate ? ClinicTime.isoDateOf(p.birthDate) : "",
+          p.birthDate ? ClinicTime.dateOnlyOf(p.birthDate) : "",
         ].join(";"),
       )
       .join("\n");

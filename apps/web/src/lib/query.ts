@@ -1,8 +1,10 @@
 import { QueryClient } from "@tanstack/react-query";
 import { ApiError } from "./api/client";
 import type {
+  CheckAvailabilityInput,
   ListAppointmentsQuery,
   ListDocumentsQuery,
+  ListNotificationsQuery,
   ListPatientsQuery,
   ListTasksQuery,
   PageOptions,
@@ -14,8 +16,6 @@ import type {
  * ninguém precisar lembrar de listar as três.
  */
 export const qk = {
-  session: ["session"] as const,
-
   dashboard: {
     all: ["dashboard"] as const,
     today: (date?: string, professionalId?: string) =>
@@ -30,8 +30,19 @@ export const qk = {
     audit: (id: string) => ["appointments", "detail", id, "audit"] as const,
     calendar: (from: string, to: string, professionalId?: string) =>
       ["appointments", "calendar", { from, to, professionalId }] as const,
-    slots: (professionalId: string, date: string) =>
-      ["appointments", "slots", { professionalId, date }] as const,
+    slots: (
+      professionalId: string,
+      date: string,
+      durationMinutes?: number,
+      excludeAppointmentId?: string,
+    ) =>
+      [
+        "appointments",
+        "slots",
+        { professionalId, date, durationMinutes, excludeAppointmentId },
+      ] as const,
+    availability: (input: CheckAvailabilityInput) =>
+      ["appointments", "availability", input] as const,
   },
 
   waitingRoom: {
@@ -47,8 +58,10 @@ export const qk = {
     summary: (id: string) => ["patients", "detail", id, "summary"] as const,
     appointments: (id: string) =>
       ["patients", "detail", id, "appointments"] as const,
-    documents: (id: string) => ["patients", "detail", id, "documents"] as const,
-    tasks: (id: string) => ["patients", "detail", id, "tasks"] as const,
+    documents: (id: string, page?: number) =>
+      ["patients", "detail", id, "documents", { page }] as const,
+    tasks: (id: string, page?: number) =>
+      ["patients", "detail", id, "tasks", { page }] as const,
   },
 
   professionals: {
@@ -72,7 +85,17 @@ export const qk = {
     summary: ["tasks", "summary"] as const,
   },
 
-  settings: ["settings"] as const,
+  notifications: {
+    all: ["notifications"] as const,
+    list: (query: ListNotificationsQuery) =>
+      ["notifications", "list", query] as const,
+  },
+
+  settings: {
+    all: ["settings"] as const,
+    general: ["settings", "general"] as const,
+    whatsapp: ["settings", "whatsapp"] as const,
+  },
   search: (q: string) => ["search", q] as const,
 } as const;
 

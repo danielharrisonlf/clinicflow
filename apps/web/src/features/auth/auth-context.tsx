@@ -7,7 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { SESSION_EXPIRED_EVENT, tokenStore } from "@/lib/api/client";
+import { ApiError, SESSION_EXPIRED_EVENT, tokenStore } from "@/lib/api/client";
 import { authApi } from "@/lib/api/endpoints";
 import type { SessionUser } from "@/lib/api/types";
 
@@ -16,6 +16,9 @@ interface AuthContextValue {
   status: "loading" | "authenticated" | "anonymous";
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** A restauração falhou por rede/servidor (não por credencial). */
+  restoreError: boolean;
+  retryRestore: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -27,12 +30,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Restaura a sessão a partir do token guardado. Sem isso, um F5 no meio do
   // turno joga a recepcionista de volta para o login.
+  //
+  // Só um "não" do servidor (401/403/404) encerra a sessão. Rede caída ou 5xx
+  // no F5 não pode deslogar quem está no meio do turno: tenta de novo.
+  // Sem access mas com refresh, o `request` renova sozinho no primeiro 401.
+  const [restoreError, setRestoreError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
     let active = true;
-    if (!tokenStore.access) {
+    if (!tokenStore.access && !tokenStore.refresh) {
       setStatus("anonymous");
       return;
     }
+    setRestoreError(false);
     authApi
       .me()
       .then((session) => {
@@ -40,15 +51,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session);
         setStatus("authenticated");
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!active) return;
-        tokenStore.clear();
-        setStatus("anonymous");
+        // 429 (limite por IP) também é 4xx, mas não é recusa da sessão.
+        const rejected =
+          error instanceof ApiError &&
+          [401, 403, 404].includes(error.statusCode);
+        if (rejected) {
+          tokenStore.clear();
+          setStatus("anonymous");
+        } else {
+          setRestoreError(true);
+        }
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [attempt]);
+
+  const retryRestore = useCallback(() => setAttempt((n) => n + 1), []);
 
   // O client dispara este evento quando o refresh também falha.
   useEffect(() => {
@@ -61,12 +82,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, [queryClient]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const auth = await authApi.login(email, password);
-    tokenStore.save(auth);
-    setUser(auth.user);
-    setStatus("authenticated");
-  }, []);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const auth = await authApi.login(email, password);
+      // Cache de outra pessoa no mesmo balcão não pode vazar para a nova sessão.
+      queryClient.clear();
+      tokenStore.save(auth);
+      setUser(auth.user);
+      setStatus("authenticated");
+    },
+    [queryClient],
+  );
 
   const logout = useCallback(async () => {
     const refreshToken = tokenStore.refresh;
@@ -80,8 +106,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [queryClient]);
 
   const value = useMemo(
-    () => ({ user, status, login, logout }),
-    [user, status, login, logout],
+    () => ({ user, status, login, logout, restoreError, retryRestore }),
+    [user, status, login, logout, restoreError, retryRestore],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

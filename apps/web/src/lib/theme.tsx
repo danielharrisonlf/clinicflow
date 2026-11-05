@@ -48,14 +48,29 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => query.removeEventListener("change", onChange);
   }, []);
 
+  const resolved: "light" | "dark" =
+    preference === "system" ? (systemDark ? "dark" : "light") : preference;
+
+  // O atributo sempre carrega o tema resolvido: o CSS tem um único bloco de
+  // tokens escuros, e "sistema" é resolvido aqui (e no script de index.html).
+  // Os tokens vivem só no CSS: nada de estilo inline no <html>.
   useEffect(() => {
     const root = document.documentElement;
-    if (preference === "system") {
-      root.removeAttribute("data-theme");
-    } else {
-      root.setAttribute("data-theme", preference);
+    const switching = root.getAttribute("data-theme") !== resolved;
+    // Troca de tema não anima: as transições de cor ficam desligadas até o
+    // navegador recalcular o estilo com os tokens novos.
+    if (switching) root.setAttribute("data-theme-switching", "");
+    root.setAttribute("data-theme", resolved);
+    const appSurface = getComputedStyle(root)
+      .getPropertyValue("--color-surface-app")
+      .trim();
+    if (switching) {
+      window.setTimeout(() => root.removeAttribute("data-theme-switching"), 0);
     }
-  }, [preference]);
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", appSurface);
+  }, [resolved]);
 
   const setPreference = useCallback((next: ThemePreference) => {
     setPreferenceState(next);
@@ -70,11 +85,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<ThemeContextValue>(
     () => ({
       preference,
-      resolved:
-        preference === "system" ? (systemDark ? "dark" : "light") : preference,
+      resolved,
       setPreference,
     }),
-    [preference, systemDark, setPreference],
+    [preference, resolved, setPreference],
   );
 
   return (
